@@ -8,7 +8,16 @@
       "Bash(uv run:*)",
       "Bash(mcp restart:*)",
       "Bash(make:*)",
-      "mcp__zigi-amazon-mcp__hello_world"
+      "mcp__zigi-amazon-mcp__hello_world",
+      "mcp__zigi-amazon-mcp__process_text",
+      "mcp__zigi-amazon-mcp__read_file",
+      "mcp__zigi-amazon-mcp__write_file",
+      "mcp__zigi-amazon-mcp__json_process",
+      "mcp__zigi-amazon-mcp__convert_data",
+      "Bash(rm:*)",
+      "Bash(uv add:*)",
+      "Bash(chmod:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
