@@ -8,7 +8,11 @@ from typing import Annotated
 
 from fastmcp import FastMCP
 
-mcp: FastMCP = FastMCP("zigi-amazon-mcp")
+mcp: FastMCP = FastMCP(
+    "zigi-amazon-mcp",
+    description="A comprehensive MCP server for Amazon Seller Central API integration, providing tools for e-commerce operations, inventory management, order processing, and data analytics.",
+    version="1.0.0"
+)
 
 # Session storage - in production, use a proper session store
 session_store: dict[str, str] = {}
