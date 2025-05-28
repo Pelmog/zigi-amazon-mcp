@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      }
+    },
+    "docker-mcp": {
+      "command": "uvx",
+      "args": ["docker-mcp"]
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://ziggyuser:ziggypass@localhost:5432/ziggydb"
+      ]
+    }
+  }
+}
