@@ -156,17 +156,17 @@ from ..handlers import products
 
 def create_app():
     app = Flask(__name__)
-    
+
     # Configuration
     app.config.from_object('config.DevelopmentConfig')
-    
+
     # Register blueprints
     app.register_blueprint(products.bp, url_prefix='/api/products')
-    
+
     @app.route('/health')
     def health_check():
         return jsonify({"status": "healthy"})
-    
+
     return app
 
 # Run Flask app
@@ -299,7 +299,7 @@ make build                   # Build distribution
    ```bash
    # Check logs
    uv run python -m zigi_amazon_mcp.server --debug
-   
+
    # Verify MCP tools
    uv run python -c "from zigi_amazon_mcp.server import server; print(server.list_tools())"
    ```
@@ -308,7 +308,7 @@ make build                   # Build distribution
    ```bash
    # Run with debug info
    FLASK_ENV=development uv run flask run --debug
-   
+
    # Check port availability
    lsof -i :5000
    ```

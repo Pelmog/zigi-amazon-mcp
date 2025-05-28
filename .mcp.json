@@ -2,14 +2,19 @@
   "mcpServers": {
     "brave-search": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
       "env": {
         "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       }
     },
     "docker-mcp": {
       "command": "uvx",
-      "args": ["docker-mcp"]
+      "args": [
+        "docker-mcp"
+      ]
     },
     "postgres": {
       "command": "npx",
@@ -21,7 +26,10 @@
     },
     "zigi-amazon-mcp": {
       "command": "uv",
-      "args": ["run", "zigi-amazon-mcp"],
+      "args": [
+        "run",
+        "zigi-amazon-mcp"
+      ],
       "env": {}
     }
   }
