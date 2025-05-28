@@ -10,6 +10,9 @@ from fastmcp import FastMCP
 
 mcp: FastMCP = FastMCP("zigi-amazon-mcp")
 
+# Session storage - in production, use a proper session store
+session_store: dict[str, str] = {}
+
 
 @mcp.tool()
 def hello_world(name: Annotated[str, "Name to greet"] = "World") -> str:
@@ -143,6 +146,25 @@ def convert_data(
         return result
     except Exception as e:
         return f"Error converting data: {e!s}"
+
+
+@mcp.tool()
+def store_session_data(
+    session_id: Annotated[str, "Unique session identifier"],
+    data: Annotated[str, "Data to store in the session"],
+) -> str:
+    """Store a string in the session that can be retrieved later."""
+    session_store[session_id] = data
+    return f"Successfully stored data for session: {session_id}"
+
+
+@mcp.tool()
+def get_session_data(session_id: Annotated[str, "Unique session identifier"]) -> str:
+    """Retrieve previously stored session data."""
+    if session_id in session_store:
+        return session_store[session_id]
+    else:
+        return f"No data found for session: {session_id}"
 
 
 def main() -> None:
