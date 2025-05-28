@@ -17,7 +17,8 @@
       "Bash(rm:*)",
       "Bash(uv add:*)",
       "Bash(chmod:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": []
   }
