@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(git add:*)",
+      "Bash(uv sync:*)",
+      "Bash(find:*)",
+      "Bash(uv run:*)",
+      "Bash(mcp restart:*)",
+      "Bash(make:*)",
+      "mcp__zigi-amazon-mcp__hello_world"
+    ],
+    "deny": []
+  }
+}
