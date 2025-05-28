@@ -5,12 +5,14 @@ description = "This is a prototype MCP server to connect to the Amazon Seller Ce
 authors = [{ name = "GMCLG", email = "pelmog@gmail.com" }]
 readme = "README.md"
 keywords = ['python']
-requires-python = ">=3.9,<4.0"
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "mcp>=1.0.0",
+]
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -22,6 +24,9 @@ classifiers = [
 Homepage = "https://Pelmoggian.github.io/zigi-amazon-mcp/"
 Repository = "https://github.com/Pelmoggian/zigi-amazon-mcp"
 Documentation = "https://Pelmoggian.github.io/zigi-amazon-mcp/"
+
+[project.scripts]
+zigi-amazon-mcp = "zigi_amazon_mcp.server:main"
 
 [dependency-groups]
 dev = [

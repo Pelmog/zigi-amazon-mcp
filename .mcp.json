@@ -18,6 +18,11 @@
         "@modelcontextprotocol/server-postgres",
         "postgresql://ziggyuser:ziggypass@localhost:5432/ziggydb"
       ]
+    },
+    "zigi-amazon-mcp": {
+      "command": "uv",
+      "args": ["run", "zigi-amazon-mcp"],
+      "env": {}
     }
   }
 }
