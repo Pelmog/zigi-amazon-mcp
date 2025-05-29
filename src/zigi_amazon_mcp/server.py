@@ -542,6 +542,267 @@ def get_order(
         return f"Error retrieving order {order_id}: {e!s}"
 
 
+@mcp.tool()
+def get_inventory_in_stock(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    fulfillment_type: Annotated[
+        str, "Filter by fulfillment type: 'FBA' (Fulfilled by Amazon), 'FBM' (Fulfilled by Merchant), or 'ALL' (both)"
+    ] = "ALL",
+    details: Annotated[
+        bool, "Include detailed inventory breakdown (fulfillable, unfulfillable, reserved, inbound)"
+    ] = True,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Retrieve all products currently in stock with their inventory information.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint fetches inventory data and filters to show only products with available stock.
+    You can filter by fulfillment type:
+    - 'FBA': Only show Fulfilled by Amazon inventory
+    - 'FBM': Only show Fulfilled by Merchant inventory (Note: Limited data available via FBA Inventory API)
+    - 'ALL': Show both FBA and FBM inventory (default)
+
+    Returns interesting information including quantities, product identifiers, and inventory status.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    if not validate_auth_token(auth_token):
+        return "Error: Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token."
+
+    try:
+        # Get Amazon access token
+        access_token = get_amazon_access_token()
+        if not access_token:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "auth_failed",
+                    "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                },
+                indent=2,
+            )
+
+        # Get AWS credentials
+        creds = get_amazon_aws_credentials()
+        if not creds:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "auth_failed",
+                    "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                },
+                indent=2,
+            )
+
+        # Validate fulfillment_type parameter
+        fulfillment_type = fulfillment_type.upper()
+        if fulfillment_type not in ["FBA", "FBM", "ALL"]:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "invalid_input",
+                    "message": f"Invalid fulfillment_type: {fulfillment_type}. Must be 'FBA', 'FBM', or 'ALL'.",
+                },
+                indent=2,
+            )
+
+        # Set up AWS4Auth
+        aws_auth = AWS4Auth(
+            creds["AccessKeyId"],
+            creds["SecretAccessKey"],
+            region,
+            "execute-api",
+            session_token=creds["SessionToken"],
+        )
+
+        # Headers
+        headers = {
+            "x-amz-access-token": access_token,
+            "user-agent": "ZigiAmazonMCP/1.0 (Language=Python)",
+            "content-type": "application/json",
+        }
+
+        # Note: The FBA Inventory API only returns FBA inventory
+        # For true FBM inventory, we would need to use the Inventory API v0 or Listings API
+        # For now, we'll return appropriate messages for FBM requests
+
+        if fulfillment_type == "FBM":
+            return json.dumps(
+                {
+                    "success": True,
+                    "summary": {
+                        "products_in_stock": 0,
+                        "total_units": 0,
+                        "marketplace": marketplace_ids,
+                        "note": "FBM inventory requires Inventory API v0 or Listings API. This endpoint uses FBA Inventory API which only returns FBA inventory.",
+                    },
+                    "inventory": [],
+                },
+                indent=2,
+            )
+
+        # Prepare request parameters
+        # FBA inventory API requires granularity parameters
+        params = {
+            "marketplaceIds": marketplace_ids,  # API expects comma-separated string
+            "details": "true" if details else "false",  # Get detailed inventory information
+            "granularityType": "Marketplace",  # Required for FBA inventory API
+            "granularityId": marketplace_ids.split(",")[0],  # Use first marketplace ID
+        }
+
+        # Fetch inventory with pagination
+        api_path = "/fba/inventory/v1/summaries"
+        all_inventory = []
+        next_token = None
+        latest_payload = {}  # Store the latest payload for metadata
+
+        while True:
+            # Build URL
+            if next_token:
+                params["nextToken"] = next_token
+
+            url = f"{endpoint}{api_path}?{urlencode(params, doseq=True)}"
+
+            # Make request
+            response = requests.get(url, headers=headers, auth=aws_auth, timeout=30)
+
+            # Handle rate limiting
+            if response.status_code == 429:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "rate_limit_exceeded",
+                        "message": "Rate limit exceeded. Please wait before making another request.",
+                        "retry_after": int(response.headers.get("x-amzn-RateLimit-Limit", 60)),
+                    },
+                    indent=2,
+                )
+
+            response.raise_for_status()
+
+            result = response.json()
+            # The FBA inventory API returns data under 'payload'
+            payload = result.get("payload", result)
+            latest_payload = payload  # Store for metadata
+            inventory_items = payload.get("inventorySummaries", [])
+
+            # Filter and transform inventory items
+            for item in inventory_items:
+                # Only include items that are in stock
+                total_quantity = item.get("totalQuantity", 0)
+                if total_quantity > 0:
+                    # Extract interesting information
+                    inventory_details = item.get("inventoryDetails", {})
+
+                    transformed_item = {
+                        # Product identifiers
+                        "asin": item.get("asin"),
+                        "fn_sku": item.get("fnSku"),
+                        "seller_sku": item.get("sellerSku"),
+                        "product_name": item.get("productName"),
+                        # Stock levels
+                        "total_quantity": total_quantity,
+                        "condition": item.get("condition", "Unknown"),
+                        # Last update
+                        "last_updated": item.get("lastUpdatedTime"),
+                    }
+
+                    # Add detailed breakdown if requested
+                    if details:
+                        # Extract unfulfillable quantity - it's an object with totalUnfulfillableQuantity
+                        unfulfillable_obj = inventory_details.get("unfulfillableQuantity", {})
+                        unfulfillable_total = (
+                            unfulfillable_obj.get("totalUnfulfillableQuantity", 0)
+                            if isinstance(unfulfillable_obj, dict)
+                            else 0
+                        )
+
+                        # Extract reserved quantity - it's an object with various reservation types
+                        reserved_obj = inventory_details.get("reservedQuantity", {})
+                        reserved_total = (
+                            reserved_obj.get("totalReservedQuantity", 0) if isinstance(reserved_obj, dict) else 0
+                        )
+
+                        transformed_item["inventory_breakdown"] = {
+                            "fulfillable": inventory_details.get("fulfillableQuantity", 0),
+                            "unfulfillable": unfulfillable_total,
+                            "reserved": reserved_total,
+                            "inbound": {
+                                "working": inventory_details.get("inboundWorkingQuantity", 0),
+                                "shipped": inventory_details.get("inboundShippedQuantity", 0),
+                                "receiving": inventory_details.get("inboundReceivingQuantity", 0),
+                            },
+                        }
+
+                    all_inventory.append(transformed_item)
+
+            # Check for next page
+            next_token = payload.get("pagination", {}).get("nextToken") or payload.get("nextToken")
+            if not next_token:
+                break
+
+        # Sort by total quantity (highest first) for easier review
+        all_inventory.sort(key=lambda x: x["total_quantity"], reverse=True)
+
+        # Prepare summary statistics
+        total_products = len(all_inventory)
+        total_units = sum(item["total_quantity"] for item in all_inventory)
+
+        return json.dumps(
+            {
+                "success": True,
+                "summary": {
+                    "products_in_stock": total_products,
+                    "total_units": total_units,
+                    "marketplace": marketplace_ids,
+                    "fulfillment_type": fulfillment_type,
+                    "timestamp": latest_payload.get("timestamp", ""),
+                    "note": "Shows FBA inventory only" if fulfillment_type in ["FBA", "ALL"] else None,
+                },
+                "inventory": all_inventory,
+            },
+            indent=2,
+        )
+
+    except requests.exceptions.HTTPError as e:
+        error_response = {}
+        try:
+            error_response = e.response.json() if e.response else {}
+        except Exception:
+            error_response = {"raw_response": e.response.text if e.response else "No response"}
+
+        return json.dumps(
+            {
+                "success": False,
+                "error": "api_error",
+                "status_code": e.response.status_code if e.response else None,
+                "message": "SP-API request failed",
+                "details": error_response.get("errors", []),
+                "raw_error": str(e),
+                "error_response": error_response,
+            },
+            indent=2,
+        )
+    except Exception as e:
+        return json.dumps(
+            {"success": False, "error": "unexpected_error", "message": f"An unexpected error occurred: {e!s}"}, indent=2
+        )
+
+
 def main() -> None:
     """Entry point for the MCP server."""
     mcp.run()
