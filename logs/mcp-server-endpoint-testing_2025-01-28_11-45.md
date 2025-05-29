@@ -1,7 +1,7 @@
 # MCP Server Endpoint Testing Log
 
-**Date**: 2025-01-28  
-**Time**: 11:45  
+**Date**: 2025-01-28
+**Time**: 11:45
 **Feature**: Testing all available endpoints for zigi-amazon-mcp server
 
 ## Overview
@@ -127,7 +127,7 @@ The main area for improvement is adding Amazon-specific functionality to align w
 
 ### Action: Updated Claude Code configuration for MCP tool access
 **Rationale**: Enable direct invocation of MCP tools within Claude Code
-**Modified files**: 
+**Modified files**:
 - .claude/settings.local.json - Added permissions for all 6 MCP tools
 - docs/claude-code-usage.md - Created usage guide for Claude Code integration
 

@@ -1,6 +1,6 @@
 # Session Storage Test Report - zigi-amazon-mcp MCP Server
 
-**Date**: 2025-01-28  
+**Date**: 2025-01-28
 **Tested Endpoints**: `store_session_data`, `get_session_data`
 
 ## Test Summary

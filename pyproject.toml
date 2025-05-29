@@ -9,6 +9,10 @@ requires-python = ">=3.10,<4.0"
 dependencies = [
     "fastmcp>=2.5.1",
     "mcp>=1.0.0",
+    "boto3>=1.34.0",
+    "requests>=2.31.0",
+    "requests-aws4auth>=1.2.3",
+    "python-dotenv>=1.0.0",
 ]
 classifiers = [
     "Intended Audience :: Developers",
@@ -42,6 +46,7 @@ dev = [
     "mkdocs-material>=8.5.10",
     "mkdocstrings[python]>=0.26.1",
     "pytest-asyncio>=1.0.0",
+    "types-requests>=2.32.0.20250515",
 ]
 
 [build-system]
@@ -110,8 +115,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
+"tests/*" = ["S101", "S108"]
 "src/zigi_amazon_mcp/server.py" = ["TRY003", "TRY300", "TRY301", "S307"]
+"OldAmazonCode/*" = ["ALL"]
 
 [tool.ruff.format]
 preview = true
