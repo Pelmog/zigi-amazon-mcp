@@ -109,7 +109,7 @@ report_data = get_report(
 def check_low_stock(auth_token, threshold=10):
     inventory = get_inventory_summaries(auth_token=auth_token)
     low_stock_items = []
-    
+
     for item in inventory["inventory"]:
         if item["fulfillableQuantity"] < threshold:
             low_stock_items.append({
@@ -118,7 +118,7 @@ def check_low_stock(auth_token, threshold=10):
                 "quantity": item["fulfillableQuantity"],
                 "product": item["productName"]
             })
-    
+
     return low_stock_items
 ```
 
@@ -130,13 +130,13 @@ def calculate_restock_quantity(auth_token, sku, days_of_supply=30):
         auth_token=auth_token,
         seller_skus=sku
     )
-    
+
     # Get sales velocity (would need order history)
     orders = get_orders(
         auth_token=auth_token,
         created_after=(datetime.now() - timedelta(days=30)).isoformat()
     )
-    
+
     # Calculate daily velocity and restock amount
     # ... calculation logic ...
 ```
@@ -149,7 +149,7 @@ def sync_inventory_across_marketplaces(auth_token, sku, quantity):
         "DE": "A1PA6795UKMFR9",
         "FR": "A13V1IB3VIYZZH"
     }
-    
+
     results = {}
     for country, marketplace_id in marketplaces.items():
         result = update_listings_item(
@@ -159,7 +159,7 @@ def sync_inventory_across_marketplaces(auth_token, sku, quantity):
             quantity=quantity
         )
         results[country] = result
-    
+
     return results
 ```
 

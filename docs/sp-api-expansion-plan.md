@@ -188,7 +188,7 @@ def get_catalog_item(
 class RateLimiter:
     def __init__(self):
         self.buckets = {}
-    
+
     def check_rate_limit(self, api_path: str) -> bool:
         # Implement token bucket algorithm
         pass
