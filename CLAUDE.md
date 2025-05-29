@@ -76,6 +76,7 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 #### Amazon SP-API Tools
 10. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
 11. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
+12. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
 
 ### Session Storage Implementation
 
@@ -213,19 +214,19 @@ from typing import Dict, Any, Optional
 
 class BaseAPIClient(ABC):
     """Base class for all SP-API clients."""
-    
-    def __init__(self, access_token: str, aws_credentials: Dict[str, str], 
-                 region: str = "eu-west-1", 
+
+    def __init__(self, access_token: str, aws_credentials: Dict[str, str],
+                 region: str = "eu-west-1",
                  endpoint: str = "https://sellingpartnerapi-eu.amazon.com"):
         # Initialize AWS4Auth, headers, etc.
         pass
-    
-    def _make_request(self, method: str, path: str, 
-                     params: Optional[Dict] = None, 
+
+    def _make_request(self, method: str, path: str,
+                     params: Optional[Dict] = None,
                      data: Optional[Dict] = None) -> Dict[str, Any]:
         """Make authenticated request with rate limiting and error handling."""
         pass
-    
+
     @abstractmethod
     def get_api_path(self) -> str:
         """Return the base API path for this client."""
@@ -247,28 +248,28 @@ def get_inventory_summaries(
     **kwargs  # Allow additional parameters for flexibility
 ) -> str:
     """Clear description of what this endpoint does.
-    
+
     REQUIRES AUTHENTICATION: You must provide a valid auth_token.
-    
+
     Document the main use cases and any important limitations.
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
         return "Error: Invalid or missing auth token."
-    
+
     # 2. Apply rate limiting
     rate_limiter.wait_if_needed(api_path)
-    
+
     # 3. Get credentials
     access_token = get_amazon_access_token()
     aws_creds = get_amazon_aws_credentials()
-    
+
     # 4. Use appropriate API client
     client = InventoryAPIClient(access_token, aws_creds)
-    
+
     # 5. Make API call
     result = client.method_name(marketplace_ids, **kwargs)
-    
+
     # 6. Return formatted JSON
     return json.dumps(result, indent=2)
 ```
@@ -372,23 +373,23 @@ def handle_pagination(client, method, params, max_results=1000):
     """Generic pagination handler for SP-API endpoints."""
     all_results = []
     next_token = None
-    
+
     while len(all_results) < max_results:
         if next_token:
             params['nextToken'] = next_token
-        
+
         response = client.make_request(method, params)
         results = response.get('data', [])
-        
+
         # Add results up to max_results
         remaining = max_results - len(all_results)
         all_results.extend(results[:remaining])
-        
+
         # Check for more pages
         next_token = response.get('nextToken')
         if not next_token or len(all_results) >= max_results:
             break
-    
+
     return all_results
 ```
 
@@ -430,11 +431,11 @@ class TestInventoryAPI:
     def test_get_inventory_success(self, mock_client):
         """Test successful inventory retrieval."""
         pass
-    
+
     def test_get_inventory_rate_limit(self, mock_client):
         """Test rate limit handling."""
         pass
-    
+
     def test_get_inventory_auth_error(self, mock_client):
         """Test authentication error handling."""
         pass
@@ -556,11 +557,11 @@ When implementing new SP-API functionality:
    import json
    from datetime import datetime, timedelta
    from typing import Dict, Any, Optional
-   
+
    # Third-party imports
    import requests
    from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
-   
+
    # Local imports
    from .base import BaseAPIClient
    from ..utils.rate_limiter import RateLimiter
@@ -591,20 +592,20 @@ When implementing new SP-API functionality:
    ```python
    def function_name(param: str) -> Dict[str, Any]:
        """One-line summary of function purpose.
-       
+
        Detailed description of what the function does, when to use it,
        and any important considerations.
-       
+
        Args:
            param: Description of the parameter
-           
+
        Returns:
            Description of return value structure
-           
+
        Raises:
            RateLimitError: When rate limit is exceeded
            ValidationError: When input validation fails
-           
+
        Example:
            >>> result = function_name("value")
            >>> print(result["success"])
@@ -623,7 +624,7 @@ When implementing new SP-API functionality:
    def mock_api_client():
        """Create mock API client with test credentials."""
        return APIClient("test_token", {"AccessKeyId": "test"})
-   
+
    @patch('requests.request')
    def test_api_call(mock_request, mock_api_client):
        """Test pattern for API calls."""
@@ -632,10 +633,10 @@ When implementing new SP-API functionality:
        mock_response.status_code = 200
        mock_response.json.return_value = {"test": "data"}
        mock_request.return_value = mock_response
-       
+
        # Make call
        result = mock_api_client.method()
-       
+
        # Assertions
        assert result["success"] is True
        mock_request.assert_called_once()
@@ -704,7 +705,7 @@ When processing SP-API responses:
    ```python
    # Good: Safe nested access
    orders = result.get("payload", {}).get("Orders", [])
-   
+
    # Bad: Can raise KeyError
    orders = result["payload"]["Orders"]
    ```
@@ -738,7 +739,7 @@ For bulk operations or multiple API calls:
    ```python
    import asyncio
    import aiohttp
-   
+
    async def fetch_multiple_items(skus: List[str]) -> List[Dict]:
        async with aiohttp.ClientSession() as session:
            tasks = [fetch_item(session, sku) for sku in skus]
@@ -749,7 +750,7 @@ For bulk operations or multiple API calls:
    ```python
    # Limit concurrent requests
    semaphore = asyncio.Semaphore(5)
-   
+
    async def fetch_with_limit(session, url):
        async with semaphore:
            return await fetch(session, url)
@@ -769,7 +770,7 @@ For bulk operations or multiple API calls:
    ```python
    import logging
    logging.basicConfig(level=logging.DEBUG)
-   
+
    # Log API requests/responses (sanitize sensitive data)
    logger.debug(f"API Request: {method} {path}")
    logger.debug(f"API Response: {response.status_code}")
@@ -784,7 +785,7 @@ For bulk operations or multiple API calls:
 3. **Request ID Tracking**:
    ```python
    import uuid
-   
+
    request_id = str(uuid.uuid4())
    logger.info(f"Request {request_id}: Starting API call")
    # Include request_id in all related log messages

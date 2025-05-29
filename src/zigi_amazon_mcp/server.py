@@ -5,6 +5,8 @@ import base64
 import json
 import os
 import secrets
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode
@@ -14,6 +16,9 @@ import requests
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
+
+from .api.inventory import InventoryAPIClient
+from .utils.decorators import handle_sp_api_errors, cached_api_call
 
 # Load environment variables from .env file
 load_dotenv()
@@ -540,6 +545,83 @@ def get_order(
 
     except Exception as e:
         return f"Error retrieving order {order_id}: {e!s}"
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="inventory")
+def get_inventory_in_stock(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    fulfillment_type: Annotated[
+        str, "Filter by fulfillment type: 'FBA' (Fulfilled by Amazon), 'FBM' (Fulfilled by Merchant), or 'ALL' (both)"
+    ] = "ALL",
+    details: Annotated[
+        bool, "Include detailed inventory breakdown (fulfillable, unfulfillable, reserved, inbound)"
+    ] = True,
+    max_results: Annotated[int, "Maximum number of inventory items to return (default 1000)"] = 1000,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Retrieve all products currently in stock with their inventory information.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint fetches inventory data and filters to show only products with available stock.
+    You can filter by fulfillment type:
+    - 'FBA': Only show Fulfilled by Amazon inventory
+    - 'FBM': Only show Fulfilled by Merchant inventory (Note: Limited data available via FBA Inventory API)
+    - 'ALL': Show both FBA and FBM inventory (default)
+
+    Returns interesting information including quantities, product identifiers, and inventory status.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+
+    # 3. Use InventoryAPIClient
+    client = InventoryAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 4. Make API call
+    result = client.get_inventory_summaries(
+        marketplace_ids=marketplace_ids,
+        fulfillment_type=fulfillment_type,
+        details=details,
+        max_results=max_results,
+    )
+
+    # 5. Return formatted JSON
+    return json.dumps(result, indent=2)
 
 
 def main() -> None:

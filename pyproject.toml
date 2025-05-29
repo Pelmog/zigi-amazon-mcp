@@ -116,7 +116,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S108"]
-"src/zigi_amazon_mcp/server.py" = ["TRY003", "TRY300", "TRY301", "S307"]
+"src/zigi_amazon_mcp/server.py" = ["TRY003", "TRY300", "TRY301", "S307", "C901"]
+"src/zigi_amazon_mcp/inventory_sample.py" = ["C901"]
 "OldAmazonCode/*" = ["ALL"]
 
 [tool.ruff.format]

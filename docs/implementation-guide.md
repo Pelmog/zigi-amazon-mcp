@@ -35,8 +35,8 @@ from requests_aws4auth import AWS4Auth
 
 class BaseAPIClient(ABC):
     """Base class for all SP-API clients."""
-    
-    def __init__(self, access_token: str, aws_credentials: Dict[str, str], 
+
+    def __init__(self, access_token: str, aws_credentials: Dict[str, str],
                  region: str = "eu-west-1", endpoint: str = "https://sellingpartnerapi-eu.amazon.com"):
         self.access_token = access_token
         self.aws_auth = AWS4Auth(
@@ -52,13 +52,13 @@ class BaseAPIClient(ABC):
             "user-agent": "ZigiAmazonMCP/1.0 (Language=Python)",
             "content-type": "application/json"
         }
-    
-    def _make_request(self, method: str, path: str, 
-                     params: Optional[Dict] = None, 
+
+    def _make_request(self, method: str, path: str,
+                     params: Optional[Dict] = None,
                      data: Optional[Dict] = None) -> Dict[str, Any]:
         """Make authenticated request to SP-API."""
         url = f"{self.endpoint}{path}"
-        
+
         response = requests.request(
             method=method,
             url=url,
@@ -68,17 +68,17 @@ class BaseAPIClient(ABC):
             auth=self.aws_auth,
             timeout=30
         )
-        
+
         # Handle rate limiting
         if response.status_code == 429:
             raise RateLimitError(
                 "Rate limit exceeded",
                 retry_after=int(response.headers.get("x-amzn-RateLimit-Limit", 60))
             )
-        
+
         response.raise_for_status()
         return response.json()
-    
+
     @abstractmethod
     def get_api_path(self) -> str:
         """Return the base API path for this client."""
@@ -95,7 +95,7 @@ from threading import Lock
 
 class RateLimiter:
     """Token bucket rate limiter for SP-API endpoints."""
-    
+
     def __init__(self):
         self.buckets = defaultdict(lambda: {"tokens": 10, "last_update": time.time()})
         self.limits = {
@@ -107,27 +107,27 @@ class RateLimiter:
             "/products/pricing/v0/price": {"rate": 10, "burst": 20}
         }
         self.lock = Lock()
-    
+
     def check_rate_limit(self, api_path: str) -> bool:
         """Check if request can proceed based on rate limits."""
         with self.lock:
             now = time.time()
             bucket = self.buckets[api_path]
             limit = self.limits.get(api_path, {"rate": 5, "burst": 10})
-            
+
             # Refill tokens based on time passed
             time_passed = now - bucket["last_update"]
             tokens_to_add = time_passed * limit["rate"]
             bucket["tokens"] = min(limit["burst"], bucket["tokens"] + tokens_to_add)
             bucket["last_update"] = now
-            
+
             # Check if we have tokens available
             if bucket["tokens"] >= 1:
                 bucket["tokens"] -= 1
                 return True
-            
+
             return False
-    
+
     def wait_if_needed(self, api_path: str) -> None:
         """Wait if rate limit is exceeded."""
         while not self.check_rate_limit(api_path):
@@ -145,7 +145,7 @@ import json
 
 class SPAPICache:
     """Cache for SP-API responses."""
-    
+
     def __init__(self):
         self.cache = {}
         self.ttls = {
@@ -154,12 +154,12 @@ class SPAPICache:
             "pricing": timedelta(minutes=1),
             "catalog": timedelta(hours=1)
         }
-    
+
     def get_cache_key(self, endpoint: str, params: dict) -> str:
         """Generate cache key from endpoint and parameters."""
         key_data = f"{endpoint}:{json.dumps(params, sort_keys=True)}"
         return hashlib.md5(key_data.encode()).hexdigest()
-    
+
     def get(self, key: str) -> Any:
         """Get value from cache if not expired."""
         if key in self.cache:
@@ -169,7 +169,7 @@ class SPAPICache:
             else:
                 del self.cache[key]
         return None
-    
+
     def set(self, key: str, value: Any, cache_type: str = "default") -> None:
         """Set value in cache with TTL."""
         ttl = self.ttls.get(cache_type, timedelta(minutes=5))
@@ -180,26 +180,26 @@ def cached_api_call(cache_type: str = "default"):
     """Decorator for caching API calls."""
     def decorator(func):
         cache = SPAPICache()
-        
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Create cache key from function arguments
             cache_key = cache.get_cache_key(func.__name__, kwargs)
-            
+
             # Check cache first
             cached_result = cache.get(cache_key)
             if cached_result is not None:
                 return cached_result
-            
+
             # Make API call
             result = func(*args, **kwargs)
-            
+
             # Cache successful results
             if result and isinstance(result, dict) and result.get("success"):
                 cache.set(cache_key, result, cache_type)
-            
+
             return result
-        
+
         return wrapper
     return decorator
 ```
@@ -279,18 +279,18 @@ def get_inventory_summaries(
     """Get FBA inventory summaries."""
     if not validate_auth_token(auth_token):
         return "Error: Invalid or missing auth token."
-    
+
     # Rate limit check
     rate_limiter.wait_if_needed("/fba/inventory/v1/summaries")
-    
+
     # Get credentials
     access_token = get_amazon_access_token()
     aws_creds = get_amazon_aws_credentials()
-    
+
     # Use the API client
     client = InventoryAPIClient(access_token, aws_creds)
     result = client.get_inventory_summaries(marketplace_ids, **kwargs)
-    
+
     return json.dumps(result, indent=2)
 ```
 
@@ -313,7 +313,7 @@ class TestInventoryAPI:
             "SessionToken": "mock_session"
         }
         return InventoryAPIClient(access_token, aws_creds)
-    
+
     @patch('requests.request')
     def test_get_inventory_summaries(self, mock_request, mock_client):
         """Test inventory summaries retrieval."""
@@ -330,9 +330,9 @@ class TestInventoryAPI:
             ]
         }
         mock_request.return_value = mock_response
-        
+
         result = mock_client.get_inventory_summaries("A1F83G8C2ARO7P")
-        
+
         assert result["success"] is True
         assert len(result["inventory"]) == 1
         assert result["inventory"][0]["sellerSku"] == "MY-SKU-123"
@@ -350,7 +350,7 @@ class Marketplace(Enum):
     DE = ("A1PA6795UKMFR9", "https://sellingpartnerapi-eu.amazon.com", "eu-west-1")
     FR = ("A13V1IB3VIYZZH", "https://sellingpartnerapi-eu.amazon.com", "eu-west-1")
     JP = ("A1VC38T7YXB528", "https://sellingpartnerapi-fe.amazon.com", "us-west-2")
-    
+
     def __init__(self, marketplace_id: str, endpoint: str, region: str):
         self.marketplace_id = marketplace_id
         self.endpoint = endpoint
