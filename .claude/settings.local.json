@@ -27,7 +27,21 @@
       "Bash(python test_amazon_api.py:*)",
       "Bash(gh pr diff:*)",
       "Bash(git checkout:*)",
-      "Bash(git branch:*)"
+      "Bash(git branch:*)",
+      "Bash(git remote:*)",
+      "Bash(python:*)",
+      "Bash(mcp inspect:*)",
+      "Bash(./mcp-inspector.sh:*)",
+      "Bash(timeout 5 uv run:*)",
+      "Bash(mcp list:*)",
+      "Bash(cat:*)",
+      "mcp__zigi-amazon-mcp__get_inventory_in_stock",
+      "mcp__context7-mcp__resolve-library-id",
+      "mcp__context7-mcp__get-library-docs",
+      "mcp__zigi-amazon-mcp__update_product_price",
+      "mcp__zigi-amazon-mcp__get_fbm_inventory",
+      "Bash(git push:*)",
+      "Bash(git pull:*)"
     ],
     "deny": []
   },

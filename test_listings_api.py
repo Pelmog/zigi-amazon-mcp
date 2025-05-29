@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""Test script to explore Listings API for FBM inventory."""
+
+import json
+import os
+from urllib.parse import urlencode
+import requests
+from dotenv import load_dotenv
+from requests_aws4auth import AWS4Auth
+import boto3
+
+load_dotenv()
+
+def get_amazon_access_token():
+    """Exchange refresh token for access token from Amazon LWA."""
+    client_id = os.getenv("LWA_CLIENT_ID")
+    client_secret = os.getenv("LWA_CLIENT_SECRET")
+    refresh_token = os.getenv("LWA_REFRESH_TOKEN")
+    
+    if not all([client_id, client_secret, refresh_token]):
+        raise ValueError("Missing required LWA credentials")
+    
+    lwa_url = "https://api.amazon.com/auth/o2/token"
+    data = {
+        "grant_type": "refresh_token",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "refresh_token": refresh_token,
+    }
+    
+    response = requests.post(lwa_url, data=data, timeout=30)
+    if response.status_code == 200:
+        token_data = response.json()
+        return str(token_data["access_token"])
+    else:
+        print(f"LWA Error: {response.status_code} - {response.text}")
+        return None
+
+def get_amazon_aws_credentials():
+    """Get AWS temporary credentials by assuming role for Amazon SP-API."""
+    aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    if not all([aws_access_key_id, aws_secret_access_key]):
+        raise ValueError("Missing required AWS credentials")
+    
+    role_arn = os.getenv(
+        "AWS_ROLE_ARN",
+        "arn:aws:iam::295290492609:role/SPapi-Role-2025",
+    )
+    
+    sts_client = boto3.client(
+        "sts",
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+    )
+    
+    try:
+        assume_response = sts_client.assume_role(
+            RoleArn=role_arn, 
+            RoleSessionName="SPapi-Role-2025"
+        )
+        
+        credentials = assume_response["Credentials"]
+        return {
+            "AccessKeyId": credentials["AccessKeyId"],
+            "SecretAccessKey": credentials["SecretAccessKey"],
+            "SessionToken": credentials["SessionToken"],
+        }
+    except Exception as e:
+        print(f"STS Error: {e}")
+        return None
+
+def test_listings_api():
+    """Test the Listings API endpoint to get product listings with inventory."""
+    print("Testing Listings API for inventory information...")
+    
+    # Get access token
+    access_token = get_amazon_access_token()
+    if not access_token:
+        print("Failed to get access token")
+        return
+    
+    # Get AWS credentials
+    creds = get_amazon_aws_credentials()
+    if not creds:
+        print("Failed to get AWS credentials")
+        return
+    
+    # Set up AWS4Auth
+    region = "eu-west-1"
+    aws_auth = AWS4Auth(
+        creds["AccessKeyId"],
+        creds["SecretAccessKey"],
+        region,
+        "execute-api",
+        session_token=creds["SessionToken"],
+    )
+    
+    # Headers
+    headers = {
+        "x-amz-access-token": access_token,
+        "user-agent": "ZigiAmazonMCP/1.0 (Language=Python)",
+        "content-type": "application/json",
+    }
+    
+    # Prepare request for Listings API v2021-08-01
+    endpoint = "https://sellingpartnerapi-eu.amazon.com"
+    api_path = "/listings/2021-08-01/items"
+    
+    # Parameters for listings
+    params = {
+        "marketplaceIds": "A1F83G8C2ARO7P",  # UK marketplace
+        "includedData": "attributes,fulfillmentAvailability",  # Include fulfillment availability data
+    }
+    
+    url = f"{endpoint}{api_path}?{urlencode(params, doseq=True)}"
+    
+    print(f"\nMaking request to: {api_path}")
+    print(f"Parameters: {params}")
+    
+    try:
+        response = requests.get(url, headers=headers, auth=aws_auth, timeout=30)
+        
+        print(f"\nResponse status: {response.status_code}")
+        print(f"Response headers: {dict(response.headers)}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            print("\nSuccessful response:")
+            print(json.dumps(data, indent=2))
+            
+            # Process listings
+            if "items" in data:
+                items = data["items"]
+                print(f"\nFound {len(items)} listings")
+                
+                # Check for FBM items
+                fbm_items = []
+                fba_items = []
+                
+                for item in items:
+                    sku = item.get("sku", "Unknown SKU")
+                    attributes = item.get("attributes", {})
+                    fulfillment = item.get("fulfillmentAvailability", [])
+                    
+                    print(f"\nSKU: {sku}")
+                    print(f"  ASIN: {item.get('asin')}")
+                    
+                    # Check fulfillment channels
+                    for fulfillment_info in fulfillment:
+                        channel = fulfillment_info.get("fulfillmentChannelCode")
+                        quantity = fulfillment_info.get("quantity", 0)
+                        
+                        print(f"  Fulfillment Channel: {channel}")
+                        print(f"  Quantity: {quantity}")
+                        
+                        if channel == "DEFAULT" and quantity > 0:  # FBM
+                            fbm_items.append({
+                                "sku": sku,
+                                "asin": item.get("asin"),
+                                "quantity": quantity,
+                                "channel": channel
+                            })
+                        elif channel == "AMAZON_EU" and quantity > 0:  # FBA
+                            fba_items.append({
+                                "sku": sku,
+                                "asin": item.get("asin"),
+                                "quantity": quantity,
+                                "channel": channel
+                            })
+                
+                print(f"\nTotal FBM items in stock: {len(fbm_items)}")
+                print(f"Total FBA items in stock: {len(fba_items)}")
+                
+                if fbm_items:
+                    print("\nFBM Items:")
+                    for item in fbm_items:
+                        print(f"  - {item['sku']}: {item['quantity']} units")
+                        
+            else:
+                print("\nNo items found in response")
+                
+        else:
+            print(f"\nError response: {response.text}")
+            
+    except Exception as e:
+        print(f"\nException occurred: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+
+if __name__ == "__main__":
+    test_listings_api()
