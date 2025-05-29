@@ -77,6 +77,7 @@ class RateLimiter:
         "/feeds/2021-06-30/feeds": (15, 30),     # Feeds API
         "/reports/2021-06-30/reports": (15, 30), # Reports API
         "/product-pricing/v0/price": (10, 20),   # Pricing API
+        "/listings/2021-08-01/items": (5, 10),   # Listings API for FBM
     }
 
     def __init__(self) -> None:

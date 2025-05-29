@@ -9,7 +9,7 @@ from typing import Any, Callable, Dict
 
 import requests
 
-from ..api.base import RateLimitError
+from ..exceptions import RateLimitError
 
 logger = logging.getLogger(__name__)
 

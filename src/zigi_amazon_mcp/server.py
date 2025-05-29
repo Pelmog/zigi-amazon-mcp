@@ -8,7 +8,7 @@ import secrets
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 from urllib.parse import urlencode
 
 import boto3  # type: ignore[import-untyped]
@@ -18,7 +18,16 @@ from fastmcp import FastMCP
 from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
 
 from .api.inventory import InventoryAPIClient
+from .api.listings import ListingsAPIClient
+from .api.reports import ReportsAPIClient
+from .api.feeds import FeedsAPIClient
 from .utils.decorators import handle_sp_api_errors, cached_api_call
+from .utils.validators import (
+    validate_seller_sku,
+    validate_handling_time,
+    validate_fbm_quantity,
+    validate_bulk_inventory_updates,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -638,11 +647,27 @@ def get_inventory_in_stock(
     # 2. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 3. Use InventoryAPIClient
     client = InventoryAPIClient(access_token, aws_creds, region, endpoint)
@@ -656,6 +681,676 @@ def get_inventory_in_stock(
     )
 
     # 5. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="listings")
+def get_fbm_inventory(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    seller_id: Annotated[str, "The seller ID for the merchant account"],
+    seller_sku: Annotated[
+        str, "Specific SKU to retrieve. If not provided, use get_fbm_inventory_report for bulk data"
+    ],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    include_inactive: Annotated[
+        bool, "Include inactive listings in the results"
+    ] = False,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get FBM (Fulfilled by Merchant) inventory using Listings API for real-time data.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint retrieves individual FBM product listings with real-time fulfillment availability,
+    handling time, and stock levels. Use this for checking specific SKUs.
+
+    For bulk inventory data, use get_fbm_inventory_report instead.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Validate inputs
+    if not seller_id:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "seller_id is required",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    if not validate_seller_sku(seller_sku):
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "Invalid SKU format",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Use ListingsAPIClient
+    client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Make API call
+    result = client.get_listings_item(
+        seller_id=seller_id,
+        sku=seller_sku,
+        marketplace_ids=marketplace_ids,
+        included_data=["summaries", "attributes", "offers", "fulfillmentAvailability"],
+    )
+
+    # 6. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_fbm_inventory_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_type: Annotated[
+        str,
+        "Report type: 'ALL_DATA' (all listings), 'ACTIVE' (active only), or 'INACTIVE' (inactive only)"
+    ] = "ALL_DATA",
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    start_date: Annotated[
+        Optional[str], "ISO 8601 format start date for the report data"
+    ] = None,
+    end_date: Annotated[
+        Optional[str], "ISO 8601 format end date for the report data"
+    ] = None,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Generate and retrieve FBM inventory report for bulk data.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint creates a report request for comprehensive FBM inventory data.
+    Reports provide bulk data for all FBM listings but are not real-time.
+
+    Report types:
+    - 'ALL_DATA': GET_MERCHANT_LISTINGS_ALL_DATA - All listings
+    - 'ACTIVE': GET_MERCHANT_LISTINGS_DATA - Active listings only  
+    - 'INACTIVE': GET_MERCHANT_LISTINGS_INACTIVE_DATA - Inactive listings only
+
+    Note: This function creates the report request. The report generation is asynchronous.
+    You'll need to check the report status and download it when ready.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Map report type
+    report_type_map = {
+        "ALL_DATA": "GET_MERCHANT_LISTINGS_ALL_DATA",
+        "ACTIVE": "GET_MERCHANT_LISTINGS_DATA",
+        "INACTIVE": "GET_MERCHANT_LISTINGS_INACTIVE_DATA",
+    }
+
+    if report_type not in report_type_map:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": f"Invalid report_type. Must be one of: {', '.join(report_type_map.keys())}",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Make API call
+    result = client.create_report(
+        report_type=report_type_map[report_type],
+        marketplace_ids=marketplace_ids,
+        start_date=start_date,
+        end_date=end_date,
+    )
+
+    # 6. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def update_fbm_inventory(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    seller_id: Annotated[str, "The seller ID for the merchant account"],
+    seller_sku: Annotated[str, "SKU to update"],
+    quantity: Annotated[int, "New quantity available (must be >= 0)"],
+    handling_time: Annotated[
+        Optional[int], "Days to ship (1-30). If not provided, existing value is retained"
+    ] = None,
+    restock_date: Annotated[
+        Optional[str], "ISO 8601 format restock date (must be in the future)"
+    ] = None,
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Update FBM inventory quantity and fulfillment details.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint updates individual FBM product inventory levels and fulfillment settings.
+    Use this for single SKU updates. For bulk updates, use bulk_update_fbm_inventory.
+
+    Parameters:
+    - quantity: Must be >= 0. Set to 0 to mark as out of stock.
+    - handling_time: Days needed to ship (1-30 days)
+    - restock_date: Future date when item will be back in stock
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Validate inputs
+    validation_errors = []
+
+    if not seller_id:
+        validation_errors.append("seller_id is required")
+
+    if not validate_seller_sku(seller_sku):
+        validation_errors.append("Invalid SKU format")
+
+    if not validate_fbm_quantity(quantity):
+        validation_errors.append("Quantity must be >= 0")
+
+    if handling_time is not None and not validate_handling_time(handling_time):
+        validation_errors.append("Handling time must be between 1-30 days")
+
+    if validation_errors:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "Input validation failed",
+            "details": validation_errors,
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Build patch operations
+    patches = []
+
+    # Update fulfillment availability
+    fulfillment_data = {
+        "fulfillmentChannelCode": "DEFAULT",  # FBM
+        "quantity": quantity,
+        "isAvailable": quantity > 0,
+    }
+
+    if handling_time is not None:
+        fulfillment_data["handlingTime"] = {"max": handling_time}
+
+    if restock_date is not None:
+        fulfillment_data["restockDate"] = restock_date
+
+    patches.append({
+        "op": "replace",
+        "path": "/attributes/fulfillment_availability",
+        "value": [fulfillment_data]
+    })
+
+    # 5. Use ListingsAPIClient
+    client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 6. Make API call
+    result = client.patch_listings_item(
+        seller_id=seller_id,
+        sku=seller_sku,
+        marketplace_ids=marketplace_ids,
+        patches=patches,
+    )
+
+    # 7. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def bulk_update_fbm_inventory(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    inventory_updates: Annotated[
+        str,
+        "JSON array of inventory updates. Each item must have: sku, quantity, and optionally handling_time and restock_date"
+    ],
+    marketplace_id: Annotated[
+        str, "Target marketplace ID (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Bulk update FBM inventory using Feeds API.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint enables bulk updates of FBM inventory for multiple SKUs in a single operation.
+    More efficient than individual updates for large catalogs.
+
+    The inventory_updates parameter should be a JSON array like:
+    [
+        {
+            "sku": "SKU123",
+            "quantity": 50,
+            "handling_time": 2,  // optional, days to ship (1-30)
+            "restock_date": "2025-06-01T00:00:00Z"  // optional, ISO 8601 format
+        },
+        ...
+    ]
+
+    Maximum 10,000 items per feed.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Parse and validate inventory updates
+    try:
+        updates = json.loads(inventory_updates)
+    except json.JSONDecodeError:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "inventory_updates must be a valid JSON array",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # Validate updates
+    is_valid, errors = validate_bulk_inventory_updates(updates)
+    if not is_valid:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "Validation failed for inventory updates",
+            "details": errors,
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Use FeedsAPIClient
+    client = FeedsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Create feed document
+    doc_result = client.create_feed_document(content_type="XML")
+    if not doc_result.get("success"):
+        return json.dumps(doc_result, indent=2)
+
+    feed_document_id = doc_result["data"]["feedDocumentId"]
+    upload_url = doc_result["data"]["url"]
+
+    # 6. Build and upload XML feed content
+    xml_content = client.build_inventory_feed_xml(updates)
+
+    # Upload to S3
+    upload_response = requests.put(
+        upload_url,
+        data=xml_content.encode("utf-8"),
+        headers={"Content-Type": "text/xml; charset=UTF-8"},
+        timeout=60,
+    )
+    upload_response.raise_for_status()
+
+    # 7. Create feed
+    feed_result = client.create_feed(
+        feed_type="POST_INVENTORY_AVAILABILITY_DATA",
+        marketplace_ids=marketplace_id,
+        feed_document_id=feed_document_id,
+    )
+
+    # 8. Return formatted JSON
+    return json.dumps(feed_result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def update_product_price(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    seller_id: Annotated[str, "The seller ID for the merchant account"],
+    seller_sku: Annotated[str, "SKU of the product to update"],
+    new_price: Annotated[str, "New price value (e.g., '69.98' for £69.98)"],
+    currency: Annotated[str, "Currency code (e.g., 'GBP', 'EUR', 'USD')"] = "GBP",
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Update product price on Amazon.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint updates the price of a product listing on Amazon.
+    Works for both FBA and FBM products.
+
+    Parameters:
+    - seller_sku: The SKU of the product to update
+    - new_price: The new price (number only, e.g., '69.98')
+    - currency: Currency code (default: GBP for UK marketplace)
+
+    Note: Price updates typically take 5-15 minutes to reflect on Amazon.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Validate inputs
+    validation_errors = []
+
+    if not seller_id:
+        validation_errors.append("seller_id is required")
+
+    if not validate_seller_sku(seller_sku):
+        validation_errors.append("Invalid SKU format")
+
+    # Validate price format
+    try:
+        price_float = float(new_price)
+        if price_float < 0:
+            validation_errors.append("Price must be positive")
+    except ValueError:
+        validation_errors.append("Invalid price format. Use numeric value like '69.98'")
+
+    if currency not in ["GBP", "EUR", "USD", "CAD", "AUD", "JPY"]:
+        validation_errors.append(f"Unsupported currency: {currency}")
+
+    if validation_errors:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "Input validation failed",
+            "details": validation_errors,
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Build patch operations for price update
+    patches = [
+        {
+            "op": "replace",
+            "path": "/attributes/purchasable_offer",
+            "value": [
+                {
+                    "audience": "ALL",
+                    "our_price": [
+                        {
+                            "schedule": [
+                                {
+                                    "value_with_tax": new_price
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    # 5. Use ListingsAPIClient
+    client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 6. Make API call
+    result = client.patch_listings_item(
+        seller_id=seller_id,
+        sku=seller_sku,
+        marketplace_ids=marketplace_ids,
+        patches=patches,
+    )
+
+    # 7. Add price info to success response
+    if result.get('success'):
+        result['price_update'] = {
+            "sku": seller_sku,
+            "new_price": f"{currency} {new_price}",
+            "marketplace": marketplace_ids,
+            "note": "Price updates typically take 5-15 minutes to reflect on Amazon"
+        }
+
+    # 8. Return formatted JSON
     return json.dumps(result, indent=2)
 
 
