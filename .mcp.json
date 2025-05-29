@@ -31,6 +31,13 @@
         "zigi-amazon-mcp"
       ],
       "env": {}
+    },
+    "context7-mcp": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
     }
   }
 }
