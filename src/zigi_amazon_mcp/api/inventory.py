@@ -7,7 +7,8 @@ from urllib.parse import urlencode
 
 import requests
 
-from .base import BaseAPIClient, RateLimitError
+from .base import BaseAPIClient
+from ..exceptions import RateLimitError
 from ..constants import API_PATHS, FULFILLMENT_TYPES
 from ..utils.validators import (
     validate_marketplace_ids, 
@@ -187,7 +188,7 @@ class InventoryAPIClient(BaseAPIClient):
         Returns:
             Dict containing inventory data and metadata
         """
-        all_inventory = []
+        all_inventory: List[Dict[str, Any]] = []
         next_token = None
         api_calls = 0
         latest_payload = {}

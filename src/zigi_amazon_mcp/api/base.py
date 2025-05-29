@@ -9,17 +9,10 @@ from typing import Any, Dict, Optional
 import requests
 from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
 
+from ..exceptions import RateLimitError
 from ..utils.rate_limiter import RateLimiter
 
 logger = logging.getLogger(__name__)
-
-
-class RateLimitError(Exception):
-    """Raised when rate limit is exceeded."""
-
-    def __init__(self, message: str, retry_after: int = 60) -> None:
-        super().__init__(message)
-        self.retry_after = retry_after
 
 
 class BaseAPIClient(ABC):
@@ -118,7 +111,7 @@ class BaseAPIClient(ABC):
                 raise RateLimitError("Rate limit exceeded", retry_after)
             
             response.raise_for_status()
-            result = response.json()
+            result: Dict[str, Any] = response.json()
             
             logger.info(
                 f"Request {request_id}: Success in {duration_ms}ms, "

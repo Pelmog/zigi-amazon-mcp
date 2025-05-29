@@ -113,6 +113,7 @@ DEFAULT_RATE_LIMITS = {
     "feeds": (15, 30),
     "reports": (15, 30),
     "pricing": (10, 20),
+    "listings": (5, 10),  # Listings API for FBM
 }
 
 # Fulfillment types
@@ -144,3 +145,41 @@ PRODUCT_CONDITIONS = [
     "CollectibleAcceptable",
     "Refurbished",
 ]
+
+# FBM-specific configurations
+FBM_CONFIG = {
+    "DEFAULT_HANDLING_TIME": 2,  # Days to ship
+    "MAX_HANDLING_TIME": 30,  # Maximum days allowed
+    "MIN_HANDLING_TIME": 1,  # Minimum days allowed
+    "MAX_BULK_UPDATE_SIZE": 10000,  # Maximum items per feed
+    "REPORT_RETENTION_DAYS": 7,  # Report cache retention
+}
+
+# Report types for inventory
+REPORT_TYPES = {
+    "FBM": {
+        "ALL_LISTINGS": "GET_MERCHANT_LISTINGS_ALL_DATA",
+        "ACTIVE_LISTINGS": "GET_MERCHANT_LISTINGS_DATA",
+        "INACTIVE_LISTINGS": "GET_MERCHANT_LISTINGS_INACTIVE_DATA",
+    },
+    "FBA": {
+        "INVENTORY": "GET_AFN_INVENTORY_DATA",
+    },
+}
+
+# Feed types for updates
+FEED_TYPES = {
+    "INVENTORY": "POST_INVENTORY_AVAILABILITY_DATA",
+    "PRICING": "POST_PRODUCT_PRICING_DATA",
+    "LISTINGS": "POST_FLAT_FILE_LISTINGS_DATA",
+    "PRODUCT": "POST_PRODUCT_DATA",
+}
+
+# FBM Error codes
+FBM_ERROR_CODES = {
+    "INVALID_HANDLING_TIME": "Handling time must be between 1-30 days",
+    "QUANTITY_NEGATIVE": "FBM quantity cannot be negative",
+    "SKU_NOT_FOUND": "SKU not found in merchant inventory",
+    "FULFILLMENT_CHANNEL_MISMATCH": "SKU is FBA, not FBM",
+    "INVALID_RESTOCK_DATE": "Restock date must be in the future",
+}
