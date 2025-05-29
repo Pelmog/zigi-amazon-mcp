@@ -25,7 +25,11 @@
       "Bash(gh pr list:*)",
       "Bash(gh pr view:*)",
       "Bash(python test_amazon_api.py:*)",
-      "Bash(gh pr diff:*)"
+      "Bash(gh pr diff:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr review:*)",
+      "Bash(gh pr merge:*)"
     ],
     "deny": []
   },
