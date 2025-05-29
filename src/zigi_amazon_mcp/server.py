@@ -612,11 +612,27 @@ def get_inventory_in_stock(
     # 2. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 3. Use InventoryAPIClient
     client = InventoryAPIClient(access_token, aws_creds, region, endpoint)
@@ -709,11 +725,27 @@ def get_fbm_inventory(
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 4. Use ListingsAPIClient
     client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
@@ -809,11 +841,27 @@ def get_fbm_inventory_report(
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 4. Use ReportsAPIClient
     client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
@@ -914,11 +962,27 @@ def update_fbm_inventory(
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 4. Build patch operations
     patches = []
@@ -1045,11 +1109,27 @@ def bulk_update_fbm_inventory(
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 4. Use FeedsAPIClient
     client = FeedsAPIClient(access_token, aws_creds, region, endpoint)
@@ -1171,11 +1251,27 @@ def update_product_price(
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        raise ValueError("Failed to get Amazon access token. Check your LWA credentials.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        raise ValueError("Failed to get AWS credentials. Check your AWS credentials and role.")
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
 
     # 4. Build patch operations for price update
     patches = [

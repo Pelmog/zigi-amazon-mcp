@@ -5,7 +5,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlencode
 
-import requests
+import requests  # type: ignore[import-untyped]
 
 from .base import BaseAPIClient
 from ..exceptions import RateLimitError

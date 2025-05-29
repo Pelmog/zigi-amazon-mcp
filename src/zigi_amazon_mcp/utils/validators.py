@@ -1,7 +1,7 @@
 """Input validation utilities for SP-API parameters."""
 
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from ..constants import VALID_MARKETPLACE_IDS, FBM_CONFIG
 
@@ -18,7 +18,7 @@ def validate_marketplace_id(marketplace_id: str) -> bool:
     return marketplace_id in VALID_MARKETPLACE_IDS
 
 
-def validate_marketplace_ids(marketplace_ids: str) -> tuple[bool, List[str]]:
+def validate_marketplace_ids(marketplace_ids: str) -> Tuple[bool, List[str]]:
     """Validate comma-separated marketplace IDs.
 
     Args:
@@ -176,7 +176,7 @@ def validate_fbm_quantity(quantity: int) -> bool:
     return isinstance(quantity, int) and quantity >= 0
 
 
-def validate_bulk_inventory_updates(updates: List[Dict[str, Any]]) -> tuple[bool, List[str]]:
+def validate_bulk_inventory_updates(updates: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
     """Validate bulk inventory update items.
 
     Args:
