@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import secrets
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode
@@ -463,14 +464,30 @@ def get_orders(
             if not next_token or retrieved_count >= max_results:
                 break
 
-        return json.dumps(
-            {
-                "success": True,
-                "orders_retrieved": len(all_orders),
-                "orders": all_orders,
-            },
-            indent=2,
-        )
+        # Prepare response data
+        response_data = {
+            "success": True,
+            "orders_retrieved": len(all_orders),
+            "orders": all_orders,
+        }
+
+        # Save JSON to received-json folder
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            received_json_dir = Path("received-json")
+            received_json_dir.mkdir(exist_ok=True)
+
+            filename = f"orders_{timestamp}.json"
+            file_path = received_json_dir / filename
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(response_data, f, indent=2)
+
+        except Exception as e:
+            # Log error but don't fail the main operation
+            print(f"Warning: Failed to save JSON file: {e}")
+
+        return json.dumps(response_data, indent=2)
 
     except Exception as e:
         return f"Error retrieving orders: {e!s}"
@@ -536,7 +553,26 @@ def get_order(
         result = response.json()
         order_data = result.get("payload", {})
 
-        return json.dumps({"success": True, "order": order_data}, indent=2)
+        # Prepare response data
+        response_data = {"success": True, "order": order_data}
+
+        # Save JSON to received-json folder
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            received_json_dir = Path("received-json")
+            received_json_dir.mkdir(exist_ok=True)
+
+            filename = f"order_{order_id}_{timestamp}.json"
+            file_path = received_json_dir / filename
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(response_data, f, indent=2)
+
+        except Exception as e:
+            # Log error but don't fail the main operation
+            print(f"Warning: Failed to save JSON file: {e}")
+
+        return json.dumps(response_data, indent=2)
 
     except Exception as e:
         return f"Error retrieving order {order_id}: {e!s}"
