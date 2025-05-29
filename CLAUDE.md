@@ -106,7 +106,7 @@ When testing MCP endpoints:
 
 ### Common Issues and Solutions
 
-1. **MCP Server Not Connecting**: 
+1. **MCP Server Not Connecting**:
    - Check if server is running with `mcp` command
    - Verify server.py has no syntax errors
    - Ensure FastMCP is properly installed

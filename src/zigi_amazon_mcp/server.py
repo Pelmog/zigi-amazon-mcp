@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode
 
-import boto3
+import boto3  # type: ignore[import-untyped]
 import requests
 from dotenv import load_dotenv
 from fastmcp import FastMCP
-from requests_aws4auth import AWS4Auth
+from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
 
 # Load environment variables from .env file
 load_dotenv()
@@ -58,7 +58,7 @@ def get_amazon_access_token() -> str | None:
     response = requests.post(lwa_url, data=data, timeout=30)
     if response.status_code == 200:
         token_data = response.json()
-        return token_data["access_token"]
+        return str(token_data["access_token"])
     else:
         return None
 

@@ -62,9 +62,11 @@ def test_process_text():
 def test_read_file():
     """Test the read_file tool."""
     # Test successful read
-    with patch("pathlib.Path.exists", return_value=True), \
-         patch("pathlib.Path.is_file", return_value=True), \
-         patch("pathlib.Path.read_text", return_value="File content"):
+    with (
+        patch("pathlib.Path.exists", return_value=True),
+        patch("pathlib.Path.is_file", return_value=True),
+        patch("pathlib.Path.read_text", return_value="File content"),
+    ):
         result = read_file("/tmp/test.txt")
         assert result == "File content"
 
@@ -74,8 +76,7 @@ def test_read_file():
         assert "Error reading file: File not found" in result
 
     # Test directory instead of file
-    with patch("pathlib.Path.exists", return_value=True), \
-         patch("pathlib.Path.is_file", return_value=False):
+    with patch("pathlib.Path.exists", return_value=True), patch("pathlib.Path.is_file", return_value=False):
         result = read_file("/tmp")
         assert "Error reading file: Path is not a file" in result
 
@@ -83,15 +84,13 @@ def test_read_file():
 def test_write_file():
     """Test the write_file tool."""
     # Test successful write
-    with patch("pathlib.Path.mkdir"), \
-         patch("pathlib.Path.write_text") as mock_write:
+    with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_text") as mock_write:
         result = write_file("/tmp/test.txt", "Test content")
         assert "Successfully wrote to /tmp/test.txt" in result
         mock_write.assert_called_once_with("Test content", encoding="utf-8")
 
     # Test append mode
-    with patch("pathlib.Path.mkdir"), \
-         patch("builtins.open", mock_open()) as mock_file:
+    with patch("pathlib.Path.mkdir"), patch("builtins.open", mock_open()) as mock_file:
         result = write_file("/tmp/test.txt", "Appended content", append=True)
         assert "Successfully wrote to /tmp/test.txt" in result
         mock_file.assert_called_once_with(Path("/tmp/test.txt"), "a", encoding="utf-8")

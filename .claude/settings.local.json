@@ -18,8 +18,21 @@
       "Bash(uv add:*)",
       "Bash(chmod:*)",
       "Bash(grep:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "mcp__zigi-amazon-mcp__get_auth_token",
+      "mcp__zigi-amazon-mcp__get_orders",
+      "mcp__zigi-amazon-mcp__get_order",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(python test_amazon_api.py:*)",
+      "Bash(gh pr diff:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "brave-search",
+    "docker-mcp",
+    "postgres"
+  ]
 }
