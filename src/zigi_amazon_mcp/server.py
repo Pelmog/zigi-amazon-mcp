@@ -22,6 +22,7 @@ from .api.listings import ListingsAPIClient
 from .api.reports import ReportsAPIClient
 from .api.feeds import FeedsAPIClient
 from .utils.decorators import handle_sp_api_errors, cached_api_call
+from .utils.rate_limiter import RateLimiter
 from .utils.validators import (
     validate_seller_sku,
     validate_handling_time,
@@ -43,6 +44,9 @@ session_store: dict[str, str] = {}
 
 # Auth token storage - stores valid authentication tokens
 auth_tokens: set[str] = set()
+
+# Rate limiter instance for SP-API calls
+rate_limiter = RateLimiter()
 
 
 def validate_auth_token(token: str) -> bool:
@@ -1356,6 +1360,7 @@ def update_product_price(
 
 @mcp.tool()
 @handle_sp_api_errors
+# @cached_api_call(cache_type="listings")  # TODO: Enable when caching is fully implemented
 def get_listing(
     auth_token: Annotated[
         str,
@@ -1456,15 +1461,18 @@ def get_listing(
             }
         }, indent=2)
 
-    # 4. Parse included_data
+    # 4. Apply rate limiting
+    rate_limiter.wait_if_needed("/listings/2021-08-01/items")
+
+    # 5. Parse included_data
     included_data_list = None
     if included_data:
         included_data_list = [item.strip() for item in included_data.split(",")]
 
-    # 5. Use ListingsAPIClient
+    # 6. Use ListingsAPIClient
     client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
 
-    # 6. Make API call
+    # 7. Make API call
     result = client.get_listings_item(
         seller_id=seller_id,
         sku=seller_sku,
@@ -1472,12 +1480,13 @@ def get_listing(
         included_data=included_data_list,
     )
 
-    # 7. Return formatted JSON
+    # 8. Return formatted JSON
     return json.dumps(result, indent=2)
 
 
 @mcp.tool()
-@handle_sp_api_errors  
+@handle_sp_api_errors
+# Note: Caching not recommended for update operations as they modify data
 def update_listing(
     auth_token: Annotated[
         str,
@@ -1554,6 +1563,20 @@ def update_listing(
     if not any([title, bullet_points, description, search_terms, brand, manufacturer]):
         validation_errors.append("At least one field to update must be provided")
 
+    # Additional validation for character limits and count limits
+    if bullet_points:
+        bullet_list = [bp.strip() for bp in bullet_points.split(",")]
+        if len(bullet_list) > 5:
+            validation_errors.append("Maximum 5 bullet points allowed")
+
+    if search_terms:
+        terms_list = [term.strip() for term in search_terms.split(",")]
+        if len(terms_list) > 5:
+            validation_errors.append("Maximum 5 search terms allowed")
+
+    if title and len(title) > 200:  # Amazon title limit
+        validation_errors.append("Title must be 200 characters or less")
+
     if validation_errors:
         return json.dumps({
             "success": False,
@@ -1591,7 +1614,10 @@ def update_listing(
             }
         }, indent=2)
 
-    # 4. Build patch operations
+    # 4. Apply rate limiting
+    rate_limiter.wait_if_needed("/listings/2021-08-01/items")
+
+    # 5. Build patch operations
     patches = []
     
     if title:
@@ -1654,10 +1680,10 @@ def update_listing(
             "value": [{"value": manufacturer, "marketplace_id": marketplace_ids.split(",")[0]}]
         })
 
-    # 5. Use ListingsAPIClient
+    # 6. Use ListingsAPIClient
     client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
 
-    # 6. Make API call
+    # 7. Make API call
     result = client.patch_listings_item(
         seller_id=seller_id,
         sku=seller_sku,
@@ -1665,7 +1691,7 @@ def update_listing(
         patches=patches,
     )
 
-    # 7. Add update summary to success response
+    # 8. Add update summary to success response
     if result.get('success'):
         updates_made = []
         if title:
@@ -1688,7 +1714,7 @@ def update_listing(
             "note": "Listing updates typically take 5-15 minutes to reflect on Amazon"
         }
 
-    # 8. Return formatted JSON
+    # 9. Return formatted JSON
     return json.dumps(result, indent=2)
 
 

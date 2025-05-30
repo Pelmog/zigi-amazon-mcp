@@ -287,12 +287,14 @@ class ListingsAPIClient(BaseAPIClient):
         transformed = {
             "sku": sku,
             "asin": asin,
-            "title": product_name,
+            "product_name": product_name,  # Changed from "title" for consistency
             "brand": brand,
             "bullet_points": bullet_points,
             "description": description,
             "search_terms": search_terms,
             "images": [img["url"] for img in images],  # Simplify to just URLs
+            "condition": condition,  # Add missing condition field
+            "listing_status": summary.get("status", []),  # Add missing listing status
         }
         
         # Add pricing information if available
