@@ -9,31 +9,6 @@ This document lists all available MCP tools in the zigi-amazon-mcp server.
 - **Parameters**: None
 - **Returns**: Authentication token for use with all other functions
 
-## Core Utility Tools
-
-### hello_world
-- **Purpose**: Simple greeting tool for testing
-- **Parameters**: `auth_token`, `name` (optional)
-
-### process_text
-- **Purpose**: Process text with various operations
-- **Parameters**: `auth_token`, `text`, `operation`
-
-### read_file / write_file
-- **Purpose**: Read from or write to local files
-- **Parameters**: `auth_token`, `file_path`, `content` (for write)
-
-### json_process
-- **Purpose**: Parse/format JSON data
-- **Parameters**: `auth_token`, `data`, `operation`
-
-### convert_data
-- **Purpose**: Convert between formats (base64, hex, etc.)
-- **Parameters**: `auth_token`, `data`, `from_format`, `to_format`
-
-### store_session_data / get_session_data
-- **Purpose**: Store and retrieve session data
-- **Parameters**: `auth_token`, `session_id`, `data` (for store)
 
 ## Amazon Inventory Tools
 

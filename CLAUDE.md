@@ -62,51 +62,21 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 
 **AUTHENTICATION REQUIRED**: All functions (except get_auth_token) now require authentication!
 
-#### Core Utility Tools
+#### Authentication
 1. **get_auth_token** - Generate authentication token (MUST BE CALLED FIRST!)
-2. **hello_world** - Simple greeting tool (requires auth_token)
-3. **process_text** - Text processing with operations (requires auth_token)
-4. **read_file** - Read local file contents (requires auth_token)
-5. **write_file** - Write content to local files (requires auth_token)
-6. **json_process** - Parse/format JSON data (requires auth_token)
-7. **convert_data** - Convert between formats (requires auth_token)
-8. **store_session_data** - Store string data by session ID (requires auth_token)
-9. **get_session_data** - Retrieve stored session data (requires auth_token)
 
 #### Amazon SP-API Tools
-10. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
-11. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
-12. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
-13. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
-14. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
-15. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
-16. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
-17. **update_product_price** - Update product pricing on Amazon (requires auth_token + env vars)
-18. **get_listing** - Get detailed product listing information including title, bullets, description (requires auth_token + env vars)
-19. **update_listing** - Update product listing attributes like title, bullet points, description, search terms (requires auth_token + env vars)
+2. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
+3. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
+4. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
+5. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
+6. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
+7. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
+8. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
+9. **update_product_price** - Update product pricing on Amazon (requires auth_token + env vars)
+10. **get_listing** - Get detailed product listing information including title, bullets, description (requires auth_token + env vars)
+11. **update_listing** - Update product listing attributes like title, bullet points, description, search terms (requires auth_token + env vars)
 
-### Session Storage Implementation
-
-**IMPORTANT**: The current session storage uses an in-memory dictionary:
-```python
-session_store: dict[str, str] = {}
-```
-
-**Limitations and Considerations**:
-- Data is NOT persistent - lost when server restarts
-- No session expiration or TTL
-- No size limits or memory management
-- No authentication or session validation
-- Only supports string data (no complex objects)
-- Thread-safety not implemented (could be issue with concurrent requests)
-
-**Future Improvements Needed**:
-- Use proper session store (Redis, database, etc.) for production
-- Add session expiration/TTL
-- Implement size limits to prevent memory issues
-- Add authentication/validation for session access
-- Support for storing complex data types (JSON serialization)
-- Add thread-safety with locks if needed
 
 ### Testing MCP Endpoints
 
@@ -128,11 +98,6 @@ When testing MCP endpoints:
    - Use `Annotated[type, "description"]` for all tool parameters
    - Ensure return types are specified for all functions
    - Run `uv run mypy` to catch type issues early
-
-3. **Session Data Lost**:
-   - Remember: session storage is in-memory only
-   - Data persists only during server lifetime
-   - Plan for proper persistence before production use
 
 ## Authentication System
 
@@ -169,18 +134,16 @@ When testing MCP endpoints:
    - Tokens never expire (only valid for server lifetime)
    - No token revocation mechanism
    - No rate limiting or usage tracking per token
-   - No association between auth tokens and session data
 
-3. **Session ID vs Auth Token**:
+3. **Auth Token Usage**:
    - Auth Token: Required for authentication (from get_auth_token)
-   - Session ID: Used for organizing data storage (any string you choose)
-   - They are completely separate concepts
+   - Must be included in all SP-API function calls
+   - Token validation is performed before any API operations
 
 4. **Production Improvements Needed**:
    - Token expiration with TTL
    - Token refresh mechanism
    - Rate limiting per token
-   - Association of session data with auth tokens
    - Secure token storage (database/cache)
    - Token revocation capabilities
 
