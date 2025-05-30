@@ -23,7 +23,12 @@ from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
 
 from .api.inventory import InventoryAPIClient
 from .api.listings import ListingsAPIClient
-from .api.reports import ReportsAPIClient
+from .api.reports import (
+    ReportsAPIClient,
+    SALES_AND_TRAFFIC_REPORT,
+    FBA_INVENTORY_PLANNING,
+    FBA_FULFILLED_SHIPMENTS,
+)
 from .api.feeds import FeedsAPIClient
 from .utils.decorators import handle_sp_api_errors, cached_api_call
 from .utils.rate_limiter import RateLimiter
@@ -2367,6 +2372,606 @@ def update_listing(
         }
 
     # 9. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_sales_and_traffic_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    start_date: Annotated[
+        Optional[str],
+        "Start date for the report in ISO 8601 format (e.g., '2024-01-01T00:00:00Z'). Max 2 years ago."
+    ] = None,
+    end_date: Annotated[
+        Optional[str],
+        "End date for the report in ISO 8601 format (e.g., '2024-12-31T23:59:59Z')"
+    ] = None,
+    granularity: Annotated[
+        str,
+        "Report granularity: 'DAY', 'WEEK', 'MONTH', 'QUARTER', or 'YEAR'"
+    ] = "DAY",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get sales and traffic business report with detailed analytics.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This report contains key sales performance metrics such as:
+    - Ordered product sales, revenue, units ordered, and claim amount
+    - Buy box/feature offer percentage and conversion rates
+    - Page views and traffic metrics from both desktop and mobile
+    - Data aggregated by date and ASIN
+
+    Note: The dataStartTime must not be more than 2 years before the request date.
+    Report data freshness varies: weekly data is available within 48 hours,
+    daily data within 72 hours after the period closes.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Call get_auth_token() first.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Validate granularity
+    valid_granularities = ["DAY", "WEEK", "MONTH", "QUARTER", "YEAR"]
+    if granularity not in valid_granularities:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": f"Invalid granularity. Must be one of: {', '.join(valid_granularities)}",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Create the report request
+    report_options = {
+        "reportPeriod": granularity,
+        "asinGranularity": "CHILD"  # Get ASIN-level detail
+    }
+
+    result = client.create_report(
+        report_type=SALES_AND_TRAFFIC_REPORT,
+        marketplace_ids=marketplace_ids,
+        start_date=start_date,
+        end_date=end_date,
+        report_options=report_options
+    )
+
+    # 6. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def create_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_type: Annotated[
+        str,
+        "Report type to create (e.g., 'GET_MERCHANT_LISTINGS_ALL_DATA', 'GET_FBA_INVENTORY_PLANNING_DATA')"
+    ],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    start_date: Annotated[
+        Optional[str],
+        "Start date for the report in ISO 8601 format (e.g., '2024-01-01T00:00:00Z')"
+    ] = None,
+    end_date: Annotated[
+        Optional[str],
+        "End date for the report in ISO 8601 format (e.g., '2024-12-31T23:59:59Z')"
+    ] = None,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Create a generic report request for various report types.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    Common report types include:
+    - GET_MERCHANT_LISTINGS_ALL_DATA: Detailed all listings report
+    - GET_MERCHANT_LISTINGS_DATA: Active listings report
+    - GET_FBA_INVENTORY_PLANNING_DATA: FBA inventory health report
+    - GET_AFN_INVENTORY_DATA_BY_COUNTRY: FBA multi-country inventory
+    - GET_AMAZON_FULFILLED_SHIPMENTS_DATA_GENERAL: FBA shipments report
+
+    The report will be generated asynchronously. Use the returned reportId
+    with get_report_status to check progress and get the reportDocumentId
+    when complete.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Call get_auth_token() first.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 4. Create the report request
+    result = client.create_report(
+        report_type=report_type,
+        marketplace_ids=marketplace_ids,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    # 5. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_report_status(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_id: Annotated[
+        str,
+        "The report ID returned from create_report or get_sales_and_traffic_report"
+    ],
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get the status and details of a report.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    Check the processing status of a report request. When the status is 'DONE',
+    the response will include a reportDocumentId that can be used with
+    get_report_document to download the actual report data.
+
+    Processing statuses:
+    - IN_QUEUE: Report request is queued for processing
+    - IN_PROGRESS: Report is being generated
+    - DONE: Report is complete and ready for download
+    - CANCELLED: Report request was cancelled
+    - FATAL: Report generation failed
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Call get_auth_token() first.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 4. Get report status
+    result = client.get_report(report_id)
+
+    # 5. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_report_document(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_document_id: Annotated[
+        str,
+        "The report document ID from get_report_status when status is 'DONE'"
+    ],
+    download_content: Annotated[
+        bool,
+        "Whether to download and parse the report content (True) or just get the download URL (False)"
+    ] = True,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Download report document content or get download URL.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    When download_content is True, this function will:
+    1. Get the report document details including the download URL
+    2. Download the report content
+    3. Parse and format the data for easier consumption
+
+    When download_content is False, it returns just the download URL
+    and compression details for manual processing.
+
+    Note: Report URLs are pre-signed and expire after a short time.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Call get_auth_token() first.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 4. Get report document details
+    doc_result = client.get_report_document(report_document_id)
+
+    if not doc_result.get('success'):
+        return json.dumps(doc_result, indent=2)
+
+    # 5. If not downloading content, return the document details
+    if not download_content:
+        return json.dumps(doc_result, indent=2)
+
+    # 6. Download and parse the report content
+    try:
+        import gzip
+        import io
+        
+        url = doc_result['data']['url']
+        compression = doc_result['data'].get('compressionAlgorithm')
+        
+        # Download the report
+        response = requests.get(url)
+        response.raise_for_status()
+        
+        # Handle compression if needed
+        content = response.content
+        if compression == 'GZIP':
+            content = gzip.decompress(content)
+        
+        # Decode content
+        report_text = content.decode('utf-8')
+        
+        # Parse the report based on its format (usually tab-delimited)
+        lines = report_text.strip().split('\n')
+        if not lines:
+            return json.dumps({
+                "success": False,
+                "error": "invalid_report",
+                "message": "Report is empty"
+            }, indent=2)
+        
+        # Extract headers
+        headers = lines[0].split('\t')
+        
+        # Parse data rows
+        data_rows = []
+        for line in lines[1:]:
+            values = line.split('\t')
+            if len(values) == len(headers):
+                row_data = dict(zip(headers, values))
+                data_rows.append(row_data)
+        
+        # Create summary based on report type
+        summary = {
+            "total_rows": len(data_rows),
+            "headers": headers,
+            "report_document_id": report_document_id,
+            "downloaded_at": datetime.now().isoformat() + "Z"
+        }
+        
+        # Return formatted response
+        return json.dumps({
+            "success": True,
+            "data": {
+                "summary": summary,
+                "rows": data_rows[:100],  # Limit to first 100 rows
+                "truncated": len(data_rows) > 100,
+                "total_count": len(data_rows)
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+                "compression": compression
+            }
+        }, indent=2)
+        
+    except Exception as e:
+        return json.dumps({
+            "success": False,
+            "error": "download_failed",
+            "message": f"Failed to download or parse report: {str(e)}",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_inventory_analytics_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_type: Annotated[
+        str,
+        "Inventory report type: 'FBA_HEALTH' (planning data), 'FBA_MULTI_COUNTRY', 'FBA_SHIPMENTS', or 'ALL_LISTINGS'"
+    ] = "FBA_HEALTH",
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    include_archived: Annotated[
+        bool,
+        "Whether to include archived/inactive products in the report"
+    ] = False,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Create and retrieve inventory analytics reports for FBA/FBM analysis.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    Report types available:
+    - FBA_HEALTH: FBA inventory planning with fees, aged inventory, and recommendations
+    - FBA_MULTI_COUNTRY: Multi-country FBA inventory by location
+    - FBA_SHIPMENTS: FBA fulfilled shipments with order details
+    - ALL_LISTINGS: Complete inventory across FBA and FBM
+
+    This is a convenience function that creates the report and returns the reportId.
+    Use get_report_status to check when it's ready, then get_report_document to download.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Call get_auth_token() first.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Map report type to actual SP-API report type
+    report_type_mapping = {
+        "FBA_HEALTH": FBA_INVENTORY_PLANNING,
+        "FBA_MULTI_COUNTRY": "GET_AFN_INVENTORY_DATA_BY_COUNTRY",
+        "FBA_SHIPMENTS": FBA_FULFILLED_SHIPMENTS,
+        "ALL_LISTINGS": "GET_MERCHANT_LISTINGS_ALL_DATA" if include_archived else "GET_MERCHANT_LISTINGS_DATA"
+    }
+
+    if report_type not in report_type_mapping:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": f"Invalid report_type. Must be one of: {', '.join(report_type_mapping.keys())}",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    actual_report_type = report_type_mapping[report_type]
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Create the report request
+    result = client.create_report(
+        report_type=actual_report_type,
+        marketplace_ids=marketplace_ids
+    )
+
+    # 6. Add helpful information to the response
+    if result.get('success'):
+        result['data']['instructions'] = {
+            "next_steps": [
+                f"1. Use get_report_status with reportId '{result['data']['reportId']}' to check progress",
+                "2. When status is 'DONE', use get_report_document with the reportDocumentId to download data"
+            ],
+            "report_info": {
+                "type": report_type,
+                "actual_type": actual_report_type,
+                "description": {
+                    "FBA_HEALTH": "Provides inventory health metrics, storage fees, and recommendations",
+                    "FBA_MULTI_COUNTRY": "Shows FBA inventory distribution across countries",
+                    "FBA_SHIPMENTS": "Contains FBA shipment details with order information",
+                    "ALL_LISTINGS": "Complete product catalog with quantities and details"
+                }.get(report_type, "Inventory analytics report")
+            }
+        }
+
+    # 7. Return formatted JSON
     return json.dumps(result, indent=2)
 
 

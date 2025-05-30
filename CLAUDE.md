@@ -69,16 +69,29 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 2. **get_tool_info** - Get comprehensive documentation for any MCP tool (no auth required)
 
 #### Amazon SP-API Tools
+
+##### Order Management
 3. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
 4. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
+
+##### Inventory Management
 5. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
 6. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
 7. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
 8. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
 9. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
+
+##### Product Management
 10. **update_product_price** - Update product pricing on Amazon (requires auth_token + env vars)
 11. **get_listing** - Get detailed product listing information including title, bullets, description (requires auth_token + env vars)
 12. **update_listing** - Update product listing attributes like title, bullet points, description, search terms (requires auth_token + env vars)
+
+##### Sales Analytics & Reporting
+13. **get_sales_and_traffic_report** - Get detailed sales and traffic analytics by date/ASIN with metrics like revenue, units, page views (requires auth_token + env vars)
+14. **create_report** - Create any type of SP-API report (listings, inventory, shipments, etc.) (requires auth_token + env vars)
+15. **get_report_status** - Check the processing status of a report and get the document ID when ready (requires auth_token + env vars)
+16. **get_report_document** - Download and parse report content or get the download URL (requires auth_token + env vars)
+17. **get_inventory_analytics_report** - Convenience function for FBA health, multi-country inventory, and shipment reports (requires auth_token + env vars)
 
 
 ### Testing MCP Endpoints
