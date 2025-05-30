@@ -1354,6 +1354,344 @@ def update_product_price(
     return json.dumps(result, indent=2)
 
 
+@mcp.tool()
+@handle_sp_api_errors
+def get_listing(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    seller_id: Annotated[str, "The seller ID for the merchant account"],
+    seller_sku: Annotated[str, "SKU of the product to retrieve"],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    included_data: Annotated[
+        Optional[str], 
+        "Comma-separated data to include: attributes, issues, offers, fulfillmentAvailability"
+    ] = None,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get detailed listing information for a product including title, bullet points, description, etc.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint retrieves comprehensive product listing details from Amazon including:
+    - Product title and description
+    - Bullet points (product features)
+    - Images
+    - Pricing information
+    - Fulfillment availability
+    - Product attributes
+    - Any issues with the listing
+
+    Parameters:
+    - seller_sku: The SKU of the product to retrieve
+    - included_data: Optional data to include (defaults to all available data)
+    
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Validate inputs
+    validation_errors = []
+
+    if not seller_id:
+        validation_errors.append("seller_id is required")
+
+    if not validate_seller_sku(seller_sku):
+        validation_errors.append("Invalid SKU format")
+
+    if validation_errors:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "Input validation failed",
+            "details": validation_errors,
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Parse included_data
+    included_data_list = None
+    if included_data:
+        included_data_list = [item.strip() for item in included_data.split(",")]
+
+    # 5. Use ListingsAPIClient
+    client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 6. Make API call
+    result = client.get_listings_item(
+        seller_id=seller_id,
+        sku=seller_sku,
+        marketplace_ids=marketplace_ids,
+        included_data=included_data_list,
+    )
+
+    # 7. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors  
+def update_listing(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    seller_id: Annotated[str, "The seller ID for the merchant account"],
+    seller_sku: Annotated[str, "SKU of the product to update"],
+    title: Annotated[Optional[str], "New product title (optional)"] = None,
+    bullet_points: Annotated[
+        Optional[str], 
+        "Comma-separated list of bullet points/features (optional)"
+    ] = None,
+    description: Annotated[Optional[str], "New product description (optional)"] = None,
+    search_terms: Annotated[
+        Optional[str], 
+        "Comma-separated search terms/keywords (optional)"
+    ] = None,
+    brand: Annotated[Optional[str], "Product brand (optional)"] = None,
+    manufacturer: Annotated[Optional[str], "Product manufacturer (optional)"] = None,
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Update product listing information including title, bullet points, description, etc.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint updates various attributes of a product listing on Amazon using the PATCH
+    method, which allows partial updates. You only need to provide the fields you want to change.
+
+    Parameters:
+    - seller_sku: The SKU of the product to update
+    - title: New product title
+    - bullet_points: Comma-separated list of product features/bullet points
+    - description: New product description
+    - search_terms: Comma-separated keywords for search optimization
+    - brand: Product brand name
+    - manufacturer: Product manufacturer name
+    
+    Note: Changes typically take 5-15 minutes to reflect on Amazon.
+    
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 2. Validate inputs
+    validation_errors = []
+
+    if not seller_id:
+        validation_errors.append("seller_id is required")
+
+    if not validate_seller_sku(seller_sku):
+        validation_errors.append("Invalid SKU format")
+
+    # Check if at least one field to update is provided
+    if not any([title, bullet_points, description, search_terms, brand, manufacturer]):
+        validation_errors.append("At least one field to update must be provided")
+
+    if validation_errors:
+        return json.dumps({
+            "success": False,
+            "error": "invalid_input",
+            "message": "Input validation failed",
+            "details": validation_errors,
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    if not access_token:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get Amazon access token. Check your LWA credentials.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    aws_creds = get_amazon_aws_credentials()
+    if not aws_creds:
+        return json.dumps({
+            "success": False,
+            "error": "auth_failed",
+            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            }
+        }, indent=2)
+
+    # 4. Build patch operations
+    patches = []
+    
+    if title:
+        patches.append({
+            "op": "replace",
+            "path": "/attributes/item_name",
+            "value": [{"value": title, "marketplace_id": marketplace_ids.split(",")[0]}]
+        })
+    
+    if bullet_points:
+        # Convert comma-separated string to list of bullet points
+        bullet_list = [bp.strip() for bp in bullet_points.split(",")]
+        bullet_values = []
+        for i, bullet in enumerate(bullet_list[:5]):  # Amazon typically allows up to 5 bullet points
+            bullet_values.append({
+                "value": bullet,
+                "marketplace_id": marketplace_ids.split(",")[0]
+            })
+        
+        patches.append({
+            "op": "replace",
+            "path": "/attributes/bullet_point",
+            "value": bullet_values
+        })
+    
+    if description:
+        patches.append({
+            "op": "replace",
+            "path": "/attributes/product_description",
+            "value": [{"value": description, "marketplace_id": marketplace_ids.split(",")[0]}]
+        })
+    
+    if search_terms:
+        # Convert comma-separated string to list of search terms
+        terms_list = [term.strip() for term in search_terms.split(",")]
+        search_values = []
+        for term in terms_list[:5]:  # Amazon typically allows up to 5 search terms
+            search_values.append({
+                "value": term,
+                "marketplace_id": marketplace_ids.split(",")[0]
+            })
+        
+        patches.append({
+            "op": "replace",
+            "path": "/attributes/generic_keyword",
+            "value": search_values
+        })
+    
+    if brand:
+        patches.append({
+            "op": "replace",
+            "path": "/attributes/brand",
+            "value": [{"value": brand, "marketplace_id": marketplace_ids.split(",")[0]}]
+        })
+    
+    if manufacturer:
+        patches.append({
+            "op": "replace",
+            "path": "/attributes/manufacturer",
+            "value": [{"value": manufacturer, "marketplace_id": marketplace_ids.split(",")[0]}]
+        })
+
+    # 5. Use ListingsAPIClient
+    client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 6. Make API call
+    result = client.patch_listings_item(
+        seller_id=seller_id,
+        sku=seller_sku,
+        marketplace_ids=marketplace_ids,
+        patches=patches,
+    )
+
+    # 7. Add update summary to success response
+    if result.get('success'):
+        updates_made = []
+        if title:
+            updates_made.append("title")
+        if bullet_points:
+            updates_made.append("bullet_points")
+        if description:
+            updates_made.append("description")
+        if search_terms:
+            updates_made.append("search_terms")
+        if brand:
+            updates_made.append("brand")
+        if manufacturer:
+            updates_made.append("manufacturer")
+            
+        result['listing_update'] = {
+            "sku": seller_sku,
+            "fields_updated": updates_made,
+            "marketplace": marketplace_ids,
+            "note": "Listing updates typically take 5-15 minutes to reflect on Amazon"
+        }
+
+    # 8. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
 def main() -> None:
     """Entry point for the MCP server."""
     mcp.run()

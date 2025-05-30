@@ -41,7 +41,8 @@
       "mcp__zigi-amazon-mcp__update_product_price",
       "mcp__zigi-amazon-mcp__get_fbm_inventory",
       "Bash(git push:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git commit:*)"
     ],
     "deny": []
   },
