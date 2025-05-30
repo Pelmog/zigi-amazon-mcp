@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""MCP Server for Amazon Seller Central API integration using FastMCP."""
+"""MCP Server for Amazon Seller Central API integration using FastMCP.
+
+This server provides authentication and comprehensive tools for interacting with
+Amazon Seller Central through the SP-API, including inventory management,
+order processing, and product listing management.
+"""
 
 import json
 import os
