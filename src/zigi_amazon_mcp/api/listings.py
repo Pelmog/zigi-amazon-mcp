@@ -210,10 +210,71 @@ class ListingsAPIClient(BaseAPIClient):
         offers = api_response.get("offers", [])
         fulfillment_availability = api_response.get("fulfillmentAvailability", [])
         
-        # Extract product details
+        # Extract product details from summary
         product_name = summary.get("itemName", "")
         asin = summary.get("asin", "")
-        condition = summary.get("condition", "Unknown")
+        condition = summary.get("conditionType", "Unknown")
+        product_type = summary.get("productType", "")
+        
+        # Extract title from attributes if not in summary
+        if not product_name and "item_name" in attributes:
+            item_name_list = attributes.get("item_name", [])
+            if item_name_list and isinstance(item_name_list, list):
+                product_name = item_name_list[0].get("value", "")
+        
+        # Extract bullet points
+        bullet_points = []
+        if "bullet_point" in attributes:
+            for bullet in attributes.get("bullet_point", []):
+                if isinstance(bullet, dict) and "value" in bullet:
+                    bullet_points.append(bullet["value"])
+        
+        # Extract description
+        description = ""
+        if "product_description" in attributes:
+            desc_list = attributes.get("product_description", [])
+            if desc_list and isinstance(desc_list, list):
+                description = desc_list[0].get("value", "")
+        
+        # Extract search terms/keywords
+        search_terms = []
+        if "generic_keyword" in attributes:
+            keyword_list = attributes.get("generic_keyword", [])
+            if keyword_list and isinstance(keyword_list, list):
+                # Split comma-separated keywords
+                keywords_str = keyword_list[0].get("value", "")
+                search_terms = [term.strip() for term in keywords_str.split(",")]
+        
+        # Extract brand
+        brand = ""
+        if "brand" in attributes:
+            brand_list = attributes.get("brand", [])
+            if brand_list and isinstance(brand_list, list):
+                brand = brand_list[0].get("value", "")
+        
+        # Extract images
+        images = []
+        main_image = summary.get("mainImage", {})
+        if main_image and "link" in main_image:
+            images.append({
+                "type": "main",
+                "url": main_image["link"],
+                "height": main_image.get("height"),
+                "width": main_image.get("width")
+            })
+        
+        # Add other images from attributes
+        for i in range(1, 9):  # Check for up to 8 additional images
+            image_attr = f"other_product_image_locator_{i}"
+            if image_attr in attributes:
+                image_list = attributes.get(image_attr, [])
+                if image_list and isinstance(image_list, list):
+                    image_url = image_list[0].get("media_location", "")
+                    if image_url:
+                        images.append({
+                            "type": f"additional_{i}",
+                            "url": image_url
+                        })
         
         # Extract FBM fulfillment availability
         fbm_availability = None
@@ -222,43 +283,73 @@ class ListingsAPIClient(BaseAPIClient):
                 fbm_availability = availability
                 break
         
-        # Build transformed response
+        # Build transformed response with only important fields
         transformed = {
             "sku": sku,
             "asin": asin,
-            "product_name": product_name,
-            "condition": condition,
-            "listing_status": summary.get("status", []) if isinstance(summary.get("status"), list) else summary.get("status", "Unknown"),
-            "created_date": summary.get("createdDate"),
-            "last_updated": summary.get("lastUpdatedDate"),
+            "product_name": product_name,  # Changed from "title" for consistency
+            "brand": brand,
+            "bullet_points": bullet_points,
+            "description": description,
+            "search_terms": search_terms,
+            "images": [img["url"] for img in images],  # Simplify to just URLs
+            "condition": condition,  # Add missing condition field
+            "listing_status": summary.get("status", []),  # Add missing listing status
         }
         
         # Add pricing information if available
         if offers:
             offer = offers[0]  # Take first offer
+            price_info = offer.get("price", {})
             transformed["price"] = {
-                "amount": offer.get("price", {}).get("amount"),
-                "currency": offer.get("price", {}).get("currency"),
+                "amount": price_info.get("amount"),
+                "currency": price_info.get("currency") or price_info.get("currencyCode"),
             }
+        elif "purchasable_offer" in attributes:
+            # Extract price from attributes if not in offers
+            purchasable_offers = attributes.get("purchasable_offer", [])
+            if purchasable_offers and isinstance(purchasable_offers, list):
+                offer = purchasable_offers[0]
+                our_price = offer.get("our_price", [])
+                if our_price and isinstance(our_price, list):
+                    schedule = our_price[0].get("schedule", [])
+                    if schedule and isinstance(schedule, list):
+                        transformed["price"] = {
+                            "amount": str(schedule[0].get("value_with_tax", "")),
+                            "currency": offer.get("currency", "GBP"),
+                        }
         
         # Add FBM fulfillment information
         if fbm_availability:
             transformed["fulfillment_availability"] = {
                 "fulfillment_channel_code": fbm_availability.get("fulfillmentChannelCode", "DEFAULT"),
                 "quantity": fbm_availability.get("quantity", 0),
-                "is_available": fbm_availability.get("isAvailable", False),
-                "handling_time": fbm_availability.get("handlingTime", {}).get("max", 0),
-                "restock_date": fbm_availability.get("restockDate"),
-            }
-        else:
-            # Default FBM availability structure
-            transformed["fulfillment_availability"] = {
-                "fulfillment_channel_code": "DEFAULT",
-                "quantity": 0,
-                "is_available": False,
-                "handling_time": None,
+                "is_available": fbm_availability.get("quantity", 0) > 0,
+                "handling_time": None,  # Not provided in fulfillmentAvailability
                 "restock_date": None,
             }
+        else:
+            # Check attributes for fulfillment info
+            fulfillment_attr = attributes.get("fulfillment_availability", [])
+            if fulfillment_attr and isinstance(fulfillment_attr, list):
+                fa = fulfillment_attr[0]
+                quantity = fa.get("quantity", 0)
+                transformed["fulfillment_availability"] = {
+                    "fulfillment_channel_code": fa.get("fulfillment_channel_code", "DEFAULT"),
+                    "quantity": quantity,
+                    "is_available": quantity > 0,
+                    "handling_time": None,
+                    "restock_date": None,
+                }
+            else:
+                # Default FBM availability structure
+                transformed["fulfillment_availability"] = {
+                    "fulfillment_channel_code": "DEFAULT",
+                    "quantity": 0,
+                    "is_available": False,
+                    "handling_time": None,
+                    "restock_date": None,
+                }
         
         # Add any issues/warnings
         issues = api_response.get("issues", [])

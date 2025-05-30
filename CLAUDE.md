@@ -77,6 +77,13 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 10. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
 11. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
 12. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
+13. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
+14. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
+15. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
+16. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
+17. **update_product_price** - Update product pricing on Amazon (requires auth_token + env vars)
+18. **get_listing** - Get detailed product listing information including title, bullets, description (requires auth_token + env vars)
+19. **update_listing** - Update product listing attributes like title, bullet points, description, search terms (requires auth_token + env vars)
 
 ### Session Storage Implementation
 
