@@ -60,22 +60,25 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 
 ### Available MCP Tools/Endpoints
 
-**AUTHENTICATION REQUIRED**: All functions (except get_auth_token) now require authentication!
+**AUTHENTICATION REQUIRED**: All SP-API functions require authentication! Information tools (get_tool_info) do not require authentication.
 
 #### Authentication
 1. **get_auth_token** - Generate authentication token (MUST BE CALLED FIRST!)
 
+#### Information Tools
+2. **get_tool_info** - Get comprehensive documentation for any MCP tool (no auth required)
+
 #### Amazon SP-API Tools
-2. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
-3. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
-4. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
-5. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
-6. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
-7. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
-8. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
-9. **update_product_price** - Update product pricing on Amazon (requires auth_token + env vars)
-10. **get_listing** - Get detailed product listing information including title, bullets, description (requires auth_token + env vars)
-11. **update_listing** - Update product listing attributes like title, bullet points, description, search terms (requires auth_token + env vars)
+3. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
+4. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
+5. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
+6. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
+7. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
+8. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
+9. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
+10. **update_product_price** - Update product pricing on Amazon (requires auth_token + env vars)
+11. **get_listing** - Get detailed product listing information including title, bullets, description (requires auth_token + env vars)
+12. **update_listing** - Update product listing attributes like title, bullet points, description, search terms (requires auth_token + env vars)
 
 
 ### Testing MCP Endpoints
@@ -103,7 +106,7 @@ When testing MCP endpoints:
 
 ### How Authentication Works
 
-**CRITICAL**: All MCP functions (except get_auth_token) now require authentication!
+**CRITICAL**: All SP-API functions require authentication! Information tools (get_auth_token, get_tool_info) do not require authentication.
 
 1. **First Step - Get Auth Token**:
    ```

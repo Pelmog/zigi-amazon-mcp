@@ -144,6 +144,891 @@ def get_auth_token() -> str:
     return f"Authentication successful. Your auth token is: {token}"
 
 
+# Tool information dictionary for get_tool_info function
+TOOL_INFO = {
+    "get_auth_token": {
+        "name": "get_auth_token",
+        "category": "Authentication",
+        "description": "Generate and return a new authentication token (session ID) that must be used for all other function calls. This is the FIRST function you must call before using any other functions in this MCP server.",
+        "purpose": "Provides secure authentication for the MCP server session",
+        "when_to_use": [
+            "At the start of every new session",
+            "When you receive an 'Invalid or missing auth token' error",
+            "When switching between different users or sessions"
+        ],
+        "inputs": {
+            "parameters": {},
+            "required": [],
+            "notes": "No parameters required - simply call the function"
+        },
+        "output_format": {
+            "success": {
+                "type": "string",
+                "format": "Authentication successful. Your auth token is: <64-character-hex-token>",
+                "example": "Authentication successful. Your auth token is: a1b2c3d4e5f6789012345678901234567890123456789012345678901234567"
+            }
+        },
+        "examples": [
+            {
+                "description": "Basic authentication",
+                "call": "get_auth_token()",
+                "response": "Authentication successful. Your auth token is: 8f7d6c5b4a3928170615243342516273849506172839405162738495061728"
+            }
+        ],
+        "important_notes": [
+            "MUST be called before any other function",
+            "Token remains valid for the server lifetime",
+            "Store the token and reuse it for all subsequent calls",
+            "Each call generates a new unique token"
+        ],
+        "errors": [],
+        "rate_limits": "None",
+        "required_env_vars": []
+    },
+    "get_orders": {
+        "name": "get_orders",
+        "category": "Order Management",
+        "description": "Retrieve multiple orders from Amazon Seller Central using the SP-API with filtering and pagination support.",
+        "purpose": "Fetch order data for analysis, fulfillment tracking, and order management",
+        "when_to_use": [
+            "To retrieve recent orders for processing",
+            "To analyze order patterns over time periods",
+            "To check order status updates",
+            "For order reporting and analytics"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "description": "Authentication token from get_auth_token()",
+                    "required": True
+                },
+                "marketplace_ids": {
+                    "type": "string",
+                    "description": "Comma-separated marketplace IDs",
+                    "required": False,
+                    "default": "A1F83G8C2ARO7P",
+                    "example": "A1F83G8C2ARO7P (UK), ATVPDKIKX0DER (US)"
+                },
+                "created_after": {
+                    "type": "string",
+                    "description": "ISO 8601 date for orders after this date",
+                    "required": False,
+                    "default": "2025-01-01T00:00:00Z",
+                    "format": "YYYY-MM-DDTHH:MM:SSZ"
+                },
+                "created_before": {
+                    "type": "string",
+                    "description": "ISO 8601 date for orders before this date",
+                    "required": False,
+                    "default": "",
+                    "format": "YYYY-MM-DDTHH:MM:SSZ"
+                },
+                "order_statuses": {
+                    "type": "string",
+                    "description": "Comma-separated order statuses",
+                    "required": False,
+                    "default": "",
+                    "example": "Pending,Unshipped,Shipped"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum orders to retrieve",
+                    "required": False,
+                    "default": 100,
+                    "min": 1,
+                    "max": 100
+                }
+            },
+            "required": ["auth_token"]
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "Orders": "Array of order objects",
+                    "NextToken": "Token for pagination (if more results)",
+                    "LastUpdatedBefore": "Timestamp of last update"
+                },
+                "example": {
+                    "Orders": [
+                        {
+                            "AmazonOrderId": "123-4567890-1234567",
+                            "PurchaseDate": "2025-01-29T10:30:00Z",
+                            "OrderStatus": "Unshipped",
+                            "OrderTotal": {
+                                "Amount": "49.99",
+                                "CurrencyCode": "GBP"
+                            }
+                        }
+                    ]
+                }
+            },
+            "error": {
+                "type": "string",
+                "examples": [
+                    "Error: Invalid or missing auth token",
+                    "Error: Failed to get Amazon access token",
+                    "Error: API error - {details}"
+                ]
+            }
+        },
+        "examples": [
+            {
+                "description": "Get recent UK orders",
+                "call": "get_orders(auth_token='your_token', created_after='2025-01-20T00:00:00Z')",
+                "response": "JSON with order array"
+            },
+            {
+                "description": "Get pending orders only",
+                "call": "get_orders(auth_token='your_token', order_statuses='Pending,Unshipped')",
+                "response": "JSON with filtered orders"
+            }
+        ],
+        "important_notes": [
+            "Results are paginated - check for NextToken",
+            "Maximum 100 orders per request",
+            "Date filters use ISO 8601 format with Z suffix",
+            "Order data includes customer info - handle securely"
+        ],
+        "errors": [
+            "Invalid auth token",
+            "Missing environment variables",
+            "API rate limit exceeded",
+            "Invalid date format",
+            "Network timeout"
+        ],
+        "rate_limits": "10 requests/second, burst of 30",
+        "required_env_vars": [
+            "LWA_CLIENT_ID",
+            "LWA_CLIENT_SECRET",
+            "LWA_REFRESH_TOKEN",
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY"
+        ]
+    },
+    "get_order": {
+        "name": "get_order",
+        "category": "Order Management",
+        "description": "Retrieve detailed information for a single order from Amazon Seller Central.",
+        "purpose": "Get complete details for a specific order including items, shipping, and buyer information",
+        "when_to_use": [
+            "To view full details of a specific order",
+            "To check order item details",
+            "To get shipping address information",
+            "For customer service inquiries"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "description": "Authentication token from get_auth_token()",
+                    "required": True
+                },
+                "order_id": {
+                    "type": "string",
+                    "description": "Amazon Order ID",
+                    "required": True,
+                    "format": "XXX-XXXXXXX-XXXXXXX",
+                    "example": "123-4567890-1234567"
+                }
+            },
+            "required": ["auth_token", "order_id"]
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "AmazonOrderId": "Order ID",
+                    "OrderStatus": "Current status",
+                    "PurchaseDate": "Order timestamp",
+                    "OrderItems": "Array of items (requires separate call)",
+                    "ShippingAddress": "Delivery address details",
+                    "BuyerInfo": "Customer information"
+                }
+            },
+            "error": {
+                "type": "string",
+                "examples": [
+                    "Error: Order not found",
+                    "Error: Invalid order ID format"
+                ]
+            }
+        },
+        "important_notes": [
+            "Order items require a separate API call",
+            "Shipping address may be restricted based on order status",
+            "PII data must be handled according to regulations"
+        ],
+        "rate_limits": "10 requests/second, burst of 30"
+    },
+    "get_inventory_in_stock": {
+        "name": "get_inventory_in_stock",
+        "category": "Inventory Management",
+        "description": "Retrieve all products currently in stock with comprehensive inventory information, filterable by fulfillment type (FBA/FBM).",
+        "purpose": "Monitor stock levels, identify low inventory items, and manage inventory across fulfillment channels",
+        "when_to_use": [
+            "To check current stock levels across all products",
+            "To identify products running low on inventory",
+            "To compare FBA vs FBM inventory levels",
+            "For inventory reporting and analytics"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "description": "Authentication token",
+                    "required": True
+                },
+                "fulfillment_type": {
+                    "type": "string",
+                    "description": "Filter by fulfillment type",
+                    "required": False,
+                    "default": "ALL",
+                    "options": ["FBA", "FBM", "ALL"]
+                },
+                "marketplace_ids": {
+                    "type": "string",
+                    "description": "Marketplace to check",
+                    "required": False,
+                    "default": "A1F83G8C2ARO7P"
+                },
+                "details": {
+                    "type": "boolean",
+                    "description": "Include detailed inventory breakdown",
+                    "required": False,
+                    "default": True
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Maximum items to return",
+                    "required": False,
+                    "default": 1000
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "inventoryItems": [
+                        {
+                            "asin": "Product ASIN",
+                            "sellerSku": "Your SKU",
+                            "productName": "Product title",
+                            "totalQuantity": "Total available",
+                            "fulfillableQuantity": "Ready to ship",
+                            "reservedQuantity": "Reserved for orders",
+                            "inboundQuantity": "Incoming to FBA"
+                        }
+                    ],
+                    "summary": {
+                        "totalItems": "Number of products",
+                        "totalQuantity": "Total units in stock",
+                        "lowStockItems": "Products with <10 units"
+                    }
+                }
+            }
+        },
+        "examples": [
+            {
+                "description": "Get all FBA inventory",
+                "call": "get_inventory_in_stock(auth_token='token', fulfillment_type='FBA')",
+                "response": "JSON with FBA inventory items"
+            }
+        ],
+        "important_notes": [
+            "FBM data is limited through FBA Inventory API",
+            "Use get_fbm_inventory for detailed FBM data",
+            "Results include reserved quantities",
+            "Low stock threshold is 10 units"
+        ],
+        "rate_limits": "5 requests/second, burst of 10"
+    },
+    "get_fbm_inventory": {
+        "name": "get_fbm_inventory",
+        "category": "Inventory Management",
+        "description": "Get real-time FBM (Fulfilled by Merchant) inventory data for a specific SKU using the Listings API.",
+        "purpose": "Check current stock levels and fulfillment settings for individual FBM products",
+        "when_to_use": [
+            "To check specific FBM product availability",
+            "To verify handling time settings",
+            "Before updating FBM inventory",
+            "For real-time stock verification"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_id": {
+                    "type": "string",
+                    "description": "Your Seller ID",
+                    "required": True,
+                    "example": "A1XXXXXXXXXXXXX"
+                },
+                "seller_sku": {
+                    "type": "string",
+                    "description": "SKU to check",
+                    "required": True
+                },
+                "include_inactive": {
+                    "type": "boolean",
+                    "description": "Include inactive listings",
+                    "required": False,
+                    "default": False
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "sku": "Seller SKU",
+                    "status": "ACTIVE/INACTIVE",
+                    "fulfillment_availability": {
+                        "fulfillment_channel_code": "DEFAULT",
+                        "quantity": "Available units",
+                        "lead_time_to_ship_max_days": "Handling time"
+                    }
+                }
+            }
+        },
+        "important_notes": [
+            "Real-time data from Listings API",
+            "For bulk operations use get_fbm_inventory_report",
+            "Handling time affects Buy Box eligibility"
+        ],
+        "rate_limits": "5 requests/second, burst of 10"
+    },
+    "get_fbm_inventory_report": {
+        "name": "get_fbm_inventory_report",
+        "category": "Inventory Management",
+        "description": "Generate comprehensive FBM inventory reports for bulk data analysis.",
+        "purpose": "Get bulk FBM inventory data for all products, useful for large catalogs",
+        "when_to_use": [
+            "For inventory audits",
+            "To export all FBM data",
+            "For bulk inventory analysis",
+            "When real-time data isn't critical"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "report_type": {
+                    "type": "string",
+                    "description": "Type of report",
+                    "required": False,
+                    "default": "ALL_DATA",
+                    "options": {
+                        "ALL_DATA": "All listings",
+                        "ACTIVE": "Active listings only",
+                        "INACTIVE": "Inactive listings only"
+                    }
+                },
+                "start_date": {
+                    "type": "string",
+                    "description": "Report start date",
+                    "required": False,
+                    "format": "ISO 8601"
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "Report end date",
+                    "required": False,
+                    "format": "ISO 8601"
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "reportId": "Report ID for tracking",
+                    "reportType": "Report type requested",
+                    "processingStatus": "SUBMITTED/IN_QUEUE/IN_PROGRESS/DONE",
+                    "dataStartTime": "Report period start",
+                    "dataEndTime": "Report period end"
+                }
+            }
+        },
+        "important_notes": [
+            "Reports are generated asynchronously",
+            "Check status and download when ready",
+            "Not real-time - use get_fbm_inventory for current data",
+            "CSV format when downloaded"
+        ],
+        "rate_limits": "15 requests/second, burst of 30"
+    },
+    "update_fbm_inventory": {
+        "name": "update_fbm_inventory",
+        "category": "Inventory Management",
+        "description": "Update FBM inventory quantity and fulfillment settings for a single SKU.",
+        "purpose": "Adjust stock levels, handling time, and restock dates for individual FBM products",
+        "when_to_use": [
+            "After receiving new stock",
+            "To mark items out of stock",
+            "To update handling time",
+            "To set restock dates"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_id": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_sku": {
+                    "type": "string",
+                    "required": True
+                },
+                "quantity": {
+                    "type": "integer",
+                    "description": "New quantity (0 for out of stock)",
+                    "required": True,
+                    "min": 0,
+                    "max": 999999
+                },
+                "handling_time": {
+                    "type": "integer",
+                    "description": "Days to ship (1-30)",
+                    "required": False,
+                    "min": 1,
+                    "max": 30
+                },
+                "restock_date": {
+                    "type": "string",
+                    "description": "When item will be back",
+                    "required": False,
+                    "format": "ISO 8601"
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "sku": "Updated SKU",
+                    "submissionId": "Update tracking ID",
+                    "status": "ACCEPTED",
+                    "updates": {
+                        "quantity": "New quantity",
+                        "handling_time": "New handling time",
+                        "restock_date": "New restock date"
+                    }
+                }
+            }
+        },
+        "examples": [
+            {
+                "description": "Mark item out of stock",
+                "call": "update_fbm_inventory(auth_token='token', seller_id='A1XXX', seller_sku='SKU123', quantity=0)",
+                "response": "Success with quantity: 0"
+            },
+            {
+                "description": "Update stock and handling time",
+                "call": "update_fbm_inventory(..., quantity=50, handling_time=2)",
+                "response": "Success with both updates"
+            }
+        ],
+        "important_notes": [
+            "Changes take 5-15 minutes to reflect",
+            "Quantity 0 marks as out of stock",
+            "Handling time affects Buy Box",
+            "For bulk updates use bulk_update_fbm_inventory"
+        ],
+        "errors": [
+            "Invalid SKU",
+            "Quantity out of range",
+            "Invalid handling time (1-30 days)",
+            "Invalid date format"
+        ],
+        "rate_limits": "5 requests/second, burst of 10"
+    },
+    "bulk_update_fbm_inventory": {
+        "name": "bulk_update_fbm_inventory",
+        "category": "Inventory Management",
+        "description": "Bulk update FBM inventory for multiple SKUs in a single operation using the Feeds API.",
+        "purpose": "Efficiently update inventory for large numbers of products",
+        "when_to_use": [
+            "Updating 10+ products at once",
+            "Daily inventory synchronization",
+            "After bulk stock receipt",
+            "For catalog-wide updates"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "inventory_updates": {
+                    "type": "string",
+                    "description": "JSON array of updates",
+                    "required": True,
+                    "format": "JSON array",
+                    "structure": [
+                        {
+                            "sku": "SKU to update",
+                            "quantity": "New quantity",
+                            "handling_time": "Optional: 1-30 days",
+                            "restock_date": "Optional: ISO 8601"
+                        }
+                    ]
+                },
+                "marketplace_id": {
+                    "type": "string",
+                    "required": False,
+                    "default": "A1F83G8C2ARO7P"
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "feedId": "Feed tracking ID",
+                    "feedType": "POST_INVENTORY_AVAILABILITY_DATA",
+                    "submittedDate": "Submission timestamp",
+                    "processingStatus": "SUBMITTED",
+                    "itemCount": "Number of SKUs updated"
+                }
+            }
+        },
+        "examples": [
+            {
+                "description": "Update 3 products",
+                "call": "bulk_update_fbm_inventory(auth_token='token', inventory_updates='[{\"sku\":\"A1\",\"quantity\":10},{\"sku\":\"A2\",\"quantity\":20},{\"sku\":\"A3\",\"quantity\":0}]')",
+                "response": "Feed submitted with 3 items"
+            }
+        ],
+        "important_notes": [
+            "Maximum 10,000 items per feed",
+            "Processing is asynchronous",
+            "Check feed status for completion",
+            "More efficient than individual updates for 10+ items"
+        ],
+        "errors": [
+            "Invalid JSON format",
+            "Missing required fields",
+            "Too many items (>10,000)",
+            "Invalid marketplace"
+        ],
+        "rate_limits": "15 requests/second, burst of 30"
+    },
+    "update_product_price": {
+        "name": "update_product_price",
+        "category": "Pricing Management",
+        "description": "Update the selling price of a product on Amazon for both FBA and FBM listings.",
+        "purpose": "Adjust product pricing to remain competitive or reflect cost changes",
+        "when_to_use": [
+            "For competitive repricing",
+            "During sales or promotions",
+            "To adjust for cost changes",
+            "For dynamic pricing strategies"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_id": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_sku": {
+                    "type": "string",
+                    "required": True
+                },
+                "new_price": {
+                    "type": "string",
+                    "description": "New price (numbers only)",
+                    "required": True,
+                    "format": "XX.XX",
+                    "example": "29.99"
+                },
+                "currency": {
+                    "type": "string",
+                    "description": "Currency code",
+                    "required": False,
+                    "default": "GBP",
+                    "options": ["GBP", "USD", "EUR", "CAD"]
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "sku": "Updated SKU",
+                    "submissionId": "Tracking ID",
+                    "status": "ACCEPTED",
+                    "priceUpdate": {
+                        "previousPrice": "Old price if available",
+                        "newPrice": "New price set",
+                        "currency": "Currency code"
+                    }
+                }
+            }
+        },
+        "examples": [
+            {
+                "description": "Update UK price",
+                "call": "update_product_price(auth_token='token', seller_id='A1XXX', seller_sku='SKU123', new_price='19.99')",
+                "response": "Success with new price £19.99"
+            }
+        ],
+        "important_notes": [
+            "Price updates take 5-15 minutes",
+            "Works for both FBA and FBM",
+            "Affects Buy Box eligibility",
+            "Consider competitive pricing",
+            "VAT inclusive for EU markets"
+        ],
+        "errors": [
+            "Invalid price format",
+            "Price too low/high",
+            "Invalid SKU",
+            "Currency mismatch with marketplace"
+        ],
+        "rate_limits": "10 requests/second, burst of 20"
+    },
+    "get_listing": {
+        "name": "get_listing",
+        "category": "Product Management",
+        "description": "Retrieve comprehensive product listing details including title, description, bullet points, images, and attributes.",
+        "purpose": "View complete product information as it appears on Amazon",
+        "when_to_use": [
+            "To review current listing content",
+            "Before making listing updates",
+            "For content quality checks",
+            "To export product data"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_id": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_sku": {
+                    "type": "string",
+                    "required": True
+                },
+                "included_data": {
+                    "type": "string",
+                    "description": "Data to include",
+                    "required": False,
+                    "default": "All available",
+                    "options": ["summaries", "attributes", "issues", "offers", "fulfillmentAvailability"]
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "sku": "Seller SKU",
+                    "summaries": {
+                        "productTitle": "Current title",
+                        "manufacturer": "Brand/manufacturer",
+                        "brandName": "Brand"
+                    },
+                    "attributes": {
+                        "bullet_point": ["Feature 1", "Feature 2"],
+                        "product_description": "Full description",
+                        "generic_keyword": ["search", "terms"]
+                    },
+                    "mainImage": {
+                        "link": "Primary image URL"
+                    },
+                    "issues": "Any listing problems"
+                }
+            }
+        },
+        "important_notes": [
+            "Returns all content as shown on Amazon",
+            "Includes any listing issues/warnings",
+            "Image URLs are temporary",
+            "Some fields may be empty"
+        ],
+        "rate_limits": "5 requests/second, burst of 10"
+    },
+    "update_listing": {
+        "name": "update_listing",
+        "category": "Product Management",
+        "description": "Update product listing content including title, bullet points, description, search terms, brand, and manufacturer.",
+        "purpose": "Optimize product listings for better visibility and conversion",
+        "when_to_use": [
+            "To improve product title",
+            "To enhance bullet points",
+            "To update product description",
+            "To optimize search terms",
+            "To correct brand information"
+        ],
+        "inputs": {
+            "parameters": {
+                "auth_token": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_id": {
+                    "type": "string",
+                    "required": True
+                },
+                "seller_sku": {
+                    "type": "string",
+                    "required": True
+                },
+                "title": {
+                    "type": "string",
+                    "description": "New product title",
+                    "required": False,
+                    "max_length": 200
+                },
+                "bullet_points": {
+                    "type": "string",
+                    "description": "Comma-separated features",
+                    "required": False,
+                    "format": "Feature 1, Feature 2, ...",
+                    "max_items": 5
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Product description",
+                    "required": False,
+                    "max_length": 2000
+                },
+                "search_terms": {
+                    "type": "string",
+                    "description": "Comma-separated keywords",
+                    "required": False,
+                    "format": "term1, term2, ...",
+                    "max_items": 5
+                },
+                "brand": {
+                    "type": "string",
+                    "description": "Brand name",
+                    "required": False
+                },
+                "manufacturer": {
+                    "type": "string",
+                    "description": "Manufacturer name",
+                    "required": False
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "structure": {
+                    "sku": "Updated SKU",
+                    "submissionId": "Tracking ID",
+                    "status": "ACCEPTED",
+                    "listing_update": {
+                        "fields_updated": ["title", "bullet_points"],
+                        "marketplace": "A1F83G8C2ARO7P",
+                        "note": "Updates take 5-15 minutes"
+                    }
+                }
+            }
+        },
+        "examples": [
+            {
+                "description": "Update title and bullets",
+                "call": "update_listing(auth_token='token', seller_id='A1X', seller_sku='SKU1', title='New Title', bullet_points='Feature 1, Feature 2, Feature 3')",
+                "response": "Success with fields_updated: ['title', 'bullet_points']"
+            }
+        ],
+        "important_notes": [
+            "Only provide fields you want to change",
+            "Uses PATCH for partial updates",
+            "Changes take 5-15 minutes",
+            "Maximum 5 bullet points",
+            "Maximum 5 search terms",
+            "Follow Amazon's style guidelines"
+        ],
+        "errors": [
+            "Title too long (>200 chars)",
+            "Too many bullet points (>5)",
+            "Invalid characters in content",
+            "Restricted words used"
+        ],
+        "rate_limits": "5 requests/second, burst of 10"
+    },
+    "get_tool_info": {
+        "name": "get_tool_info",
+        "category": "Information",
+        "description": "Get detailed information about any tool available in this MCP server, including usage instructions, parameters, output formats, and examples.",
+        "purpose": "Help AI agents understand and correctly use the available tools",
+        "when_to_use": [
+            "Before using an unfamiliar tool",
+            "To understand tool parameters",
+            "To see example usage",
+            "To check error handling"
+        ],
+        "inputs": {
+            "parameters": {
+                "tool_name": {
+                    "type": "string",
+                    "description": "Name of the tool to get info about",
+                    "required": True,
+                    "options": ["get_auth_token", "get_orders", "get_order", "get_inventory_in_stock", "get_fbm_inventory", "get_fbm_inventory_report", "update_fbm_inventory", "bulk_update_fbm_inventory", "update_product_price", "get_listing", "update_listing", "get_tool_info"]
+                }
+            }
+        },
+        "output_format": {
+            "success": {
+                "type": "object",
+                "description": "Comprehensive tool information including all details needed for correct usage"
+            },
+            "error": {
+                "type": "string",
+                "example": "Error: Unknown tool name 'invalid_tool'. Available tools: get_auth_token, get_orders, ..."
+            }
+        }
+    }
+}
+
+
+@mcp.tool()
+def get_tool_info(
+    tool_name: Annotated[
+        str,
+        "Name of the tool to get information about. Options: get_auth_token, get_orders, get_order, get_inventory_in_stock, get_fbm_inventory, get_fbm_inventory_report, update_fbm_inventory, bulk_update_fbm_inventory, update_product_price, get_listing, update_listing, get_tool_info"
+    ]
+) -> str:
+    """Get detailed information about any tool available in this MCP server.
+    
+    This function provides comprehensive information about each tool including:
+    - Purpose and when to use it
+    - Detailed parameter descriptions with types and examples
+    - Output format with example responses
+    - Important notes and limitations
+    - Error scenarios
+    - Rate limits
+    - Required environment variables
+    
+    This helps AI agents understand and correctly use the available tools before calling them.
+    """
+    if tool_name not in TOOL_INFO:
+        available_tools = ", ".join(sorted(TOOL_INFO.keys()))
+        return f"Error: Unknown tool name '{tool_name}'. Available tools: {available_tools}"
+    
+    return json.dumps(TOOL_INFO[tool_name], indent=2)
+
+
 @mcp.tool()
 def get_orders(
     auth_token: Annotated[
