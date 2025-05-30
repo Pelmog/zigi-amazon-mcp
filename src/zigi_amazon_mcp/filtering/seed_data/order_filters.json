@@ -1,0 +1,452 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Record-level filters for Amazon Orders API - reduce number of orders returned",
+    "category": "record_filters",
+    "created_at": "2025-01-30T00:00:00Z"
+  },
+  "filters": [
+    {
+      "id": "high_value_orders",
+      "name": "High Value Orders",
+      "description": "Filter orders above specified monetary threshold",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.OrderTotal.Amount > {threshold})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "default": 100.0,
+          "required": false,
+          "description": "Minimum order value threshold"
+        }
+      },
+      "examples": [
+        {
+          "name": "Orders over \u00a3100",
+          "description": "Filter orders with value greater than \u00a3100",
+          "parameters": {
+            "threshold": 100.0
+          }
+        },
+        {
+          "name": "High value orders (\u00a3500+)",
+          "description": "Filter very high value orders",
+          "parameters": {
+            "threshold": 500.0
+          }
+        },
+        {
+          "name": "Premium orders (\u00a31000+)",
+          "description": "Filter premium value orders",
+          "parameters": {
+            "threshold": 1000.0
+          }
+        }
+      ],
+      "tags": [
+        "value",
+        "threshold",
+        "revenue",
+        "high-value",
+        "premium"
+      ],
+      "test_cases": [
+        {
+          "name": "high_value_filter_test",
+          "test_data": [
+            {
+              "OrderTotal": {
+                "Amount": "150.0"
+              }
+            },
+            {
+              "OrderTotal": {
+                "Amount": "50.0"
+              }
+            },
+            {
+              "OrderTotal": {
+                "Amount": "200.0"
+              }
+            }
+          ],
+          "expected_result": [
+            {
+              "OrderTotal": {
+                "Amount": "150.0"
+              }
+            },
+            {
+              "OrderTotal": {
+                "Amount": "200.0"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "pending_orders",
+      "name": "Pending Orders",
+      "description": "Orders with pending status requiring attention",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.OrderStatus == \"Pending\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "All pending orders",
+          "description": "Show all orders with pending status",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "status",
+        "pending",
+        "action-required",
+        "fulfillment"
+      ],
+      "test_cases": [
+        {
+          "name": "pending_orders_test",
+          "test_data": [
+            {
+              "OrderStatus": "Pending"
+            },
+            {
+              "OrderStatus": "Shipped"
+            },
+            {
+              "OrderStatus": "Pending"
+            }
+          ],
+          "expected_result": [
+            {
+              "OrderStatus": "Pending"
+            },
+            {
+              "OrderStatus": "Pending"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shipped_orders",
+      "name": "Shipped Orders",
+      "description": "Orders that have been shipped",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.OrderStatus == \"Shipped\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "All shipped orders",
+          "description": "Show all orders that have been shipped",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "status",
+        "shipped",
+        "fulfillment",
+        "completed"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "prime_orders",
+      "name": "Prime Orders",
+      "description": "Orders from Amazon Prime customers",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.IsPrime == true)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Prime customer orders",
+          "description": "Filter orders from Prime members",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "prime",
+        "customer",
+        "premium",
+        "membership"
+      ],
+      "test_cases": [
+        {
+          "name": "prime_orders_test",
+          "test_data": [
+            {
+              "IsPrime": true
+            },
+            {
+              "IsPrime": false
+            },
+            {
+              "IsPrime": true
+            }
+          ],
+          "expected_result": [
+            {
+              "IsPrime": true
+            },
+            {
+              "IsPrime": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "business_orders",
+      "name": "Business Orders",
+      "description": "Orders from business customers",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.IsBusinessOrder == true)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "B2B orders",
+          "description": "Filter business-to-business orders",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "business",
+        "b2b",
+        "commercial",
+        "enterprise"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "multi_item_orders",
+      "name": "Multi-Item Orders",
+      "description": "Orders containing multiple items",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.NumberOfItemsShipped > 1)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Bulk orders",
+          "description": "Orders with multiple items",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "multi-item",
+        "bulk",
+        "quantity",
+        "basket"
+      ],
+      "test_cases": [
+        {
+          "name": "multi_item_test",
+          "test_data": [
+            {
+              "NumberOfItemsShipped": 3
+            },
+            {
+              "NumberOfItemsShipped": 1
+            },
+            {
+              "NumberOfItemsShipped": 2
+            }
+          ],
+          "expected_result": [
+            {
+              "NumberOfItemsShipped": 3
+            },
+            {
+              "NumberOfItemsShipped": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "specific_marketplace",
+      "name": "Specific Marketplace Orders",
+      "description": "Filter orders from a specific marketplace",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.MarketplaceId == \"{marketplace_id}\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {
+        "marketplace_id": {
+          "type": "string",
+          "default": "A1F83G8C2ARO7P",
+          "required": false,
+          "description": "Amazon marketplace ID (default: UK)"
+        }
+      },
+      "examples": [
+        {
+          "name": "UK marketplace only",
+          "description": "Filter orders from Amazon UK",
+          "parameters": {
+            "marketplace_id": "A1F83G8C2ARO7P"
+          }
+        },
+        {
+          "name": "US marketplace only",
+          "description": "Filter orders from Amazon US",
+          "parameters": {
+            "marketplace_id": "ATVPDKIKX0DER"
+          }
+        }
+      ],
+      "tags": [
+        "marketplace",
+        "geography",
+        "region",
+        "country"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "fba_orders",
+      "name": "FBA Orders",
+      "description": "Orders fulfilled by Amazon",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.FulfillmentChannel == \"AFN\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Amazon fulfilled orders",
+          "description": "Orders handled by Amazon fulfillment",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "fba",
+        "fulfillment",
+        "amazon",
+        "afn"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "merchant_fulfilled_orders",
+      "name": "Merchant Fulfilled Orders",
+      "description": "Orders fulfilled by the merchant",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(.FulfillmentChannel == \"MFN\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Self-fulfilled orders",
+          "description": "Orders you need to fulfill yourself",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "mfn",
+        "merchant",
+        "self-fulfillment",
+        "direct"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "recent_orders",
+      "name": "Recent Orders",
+      "description": "Orders from the last N days",
+      "category": "orders",
+      "filter_type": "record",
+      "query": "filter(regex(.PurchaseDate, \"{date_pattern}\"))",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {
+        "date_pattern": {
+          "type": "string",
+          "default": "2025-01-[2-3][0-9]",
+          "required": false,
+          "description": "Regex pattern for date matching"
+        }
+      },
+      "examples": [
+        {
+          "name": "Last few days",
+          "description": "Orders from recent days using date pattern",
+          "parameters": {
+            "date_pattern": "2025-01-[2-3][0-9]"
+          }
+        }
+      ],
+      "tags": [
+        "recent",
+        "date",
+        "time",
+        "temporal"
+      ],
+      "test_cases": []
+    }
+  ]
+}

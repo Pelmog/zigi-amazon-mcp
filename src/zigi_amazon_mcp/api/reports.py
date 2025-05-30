@@ -1,20 +1,18 @@
 """Reports API client for Amazon SP-API bulk operations."""
 
-import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from typing import Any, Optional
 
 import requests  # type: ignore[import-untyped]
 
-from .base import BaseAPIClient
+from ..constants import API_PATHS
 from ..exceptions import RateLimitError
-from ..constants import API_PATHS, DEFAULT_RATE_LIMITS
 from ..utils.validators import (
-    validate_marketplace_ids,
     validate_iso8601_date,
+    validate_marketplace_ids,
 )
+from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +39,8 @@ class ReportsAPIClient(BaseAPIClient):
         marketplace_ids: str,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        report_options: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        report_options: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
         """Create a new report request.
 
         Args:
@@ -58,22 +56,20 @@ class ReportsAPIClient(BaseAPIClient):
         try:
             # Validate inputs
             validation_errors = []
-            
+
             if report_type not in self.REPORT_TYPES.values():
-                validation_errors.append(
-                    f"Invalid report_type. Valid types: {', '.join(self.REPORT_TYPES.values())}"
-                )
-            
+                validation_errors.append(f"Invalid report_type. Valid types: {', '.join(self.REPORT_TYPES.values())}")
+
             is_valid_marketplace, invalid_ids = validate_marketplace_ids(marketplace_ids)
             if not is_valid_marketplace:
                 validation_errors.append(f"Invalid marketplace IDs: {', '.join(invalid_ids)}")
-            
+
             if start_date and not validate_iso8601_date(start_date):
                 validation_errors.append(f"Invalid start_date format: {start_date}")
-            
+
             if end_date and not validate_iso8601_date(end_date):
                 validation_errors.append(f"Invalid end_date format: {end_date}")
-            
+
             if validation_errors:
                 return self._format_error_response(
                     "invalid_input",
@@ -82,11 +78,11 @@ class ReportsAPIClient(BaseAPIClient):
                 )
 
             # Build request body
-            body: Dict[str, Any] = {
+            body: dict[str, Any] = {
                 "reportType": report_type,
                 "marketplaceIds": marketplace_ids.split(","),
             }
-            
+
             if start_date:
                 body["dataStartTime"] = start_date
             if end_date:
@@ -96,10 +92,10 @@ class ReportsAPIClient(BaseAPIClient):
 
             # Make API request
             result = self._make_request("POST", self.get_api_path(), data=body)
-            
+
             # Extract report ID
             report_id = result.get("reportId", "")
-            
+
             return self._format_success_response(
                 {
                     "reportId": report_id,
@@ -110,7 +106,7 @@ class ReportsAPIClient(BaseAPIClient):
                 metadata={
                     "marketplace": marketplace_ids.split(",")[0],
                     "report_type": report_type,
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -122,13 +118,13 @@ class ReportsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in create_report: {e}")
+            logger.exception(f"Unexpected error in create_report: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
-    def get_report(self, report_id: str) -> Dict[str, Any]:
+    def get_report(self, report_id: str) -> dict[str, Any]:
         """Get the status and details of a report.
 
         Args:
@@ -149,15 +145,15 @@ class ReportsAPIClient(BaseAPIClient):
 
             # Make API request
             result = self._make_request("GET", path)
-            
+
             # Transform response
             report_data = self._transform_report_response(result)
-            
+
             return self._format_success_response(
                 report_data,
                 metadata={
                     "report_id": report_id,
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -169,13 +165,13 @@ class ReportsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in get_report: {e}")
+            logger.exception(f"Unexpected error in get_report: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
-    def get_report_document(self, report_document_id: str) -> Dict[str, Any]:
+    def get_report_document(self, report_document_id: str) -> dict[str, Any]:
         """Get the download URL for a report document.
 
         Args:
@@ -196,7 +192,7 @@ class ReportsAPIClient(BaseAPIClient):
 
             # Make API request
             result = self._make_request("GET", path)
-            
+
             return self._format_success_response(
                 {
                     "url": result.get("url"),
@@ -205,7 +201,7 @@ class ReportsAPIClient(BaseAPIClient):
                 },
                 metadata={
                     "report_document_id": report_document_id,
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -217,21 +213,21 @@ class ReportsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in get_report_document: {e}")
+            logger.exception(f"Unexpected error in get_report_document: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
     def get_reports(
         self,
-        report_types: Optional[List[str]] = None,
-        processing_statuses: Optional[List[str]] = None,
+        report_types: Optional[list[str]] = None,
+        processing_statuses: Optional[list[str]] = None,
         marketplace_ids: Optional[str] = None,
         created_after: Optional[str] = None,
         created_before: Optional[str] = None,
         max_results: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get a list of reports matching the criteria.
 
         Args:
@@ -248,18 +244,18 @@ class ReportsAPIClient(BaseAPIClient):
         try:
             # Validate inputs
             validation_errors = []
-            
+
             if marketplace_ids:
                 is_valid_marketplace, invalid_ids = validate_marketplace_ids(marketplace_ids)
                 if not is_valid_marketplace:
                     validation_errors.append(f"Invalid marketplace IDs: {', '.join(invalid_ids)}")
-            
+
             if created_after and not validate_iso8601_date(created_after):
                 validation_errors.append(f"Invalid created_after format: {created_after}")
-            
+
             if created_before and not validate_iso8601_date(created_before):
                 validation_errors.append(f"Invalid created_before format: {created_before}")
-            
+
             if validation_errors:
                 return self._format_error_response(
                     "invalid_input",
@@ -268,8 +264,8 @@ class ReportsAPIClient(BaseAPIClient):
                 )
 
             # Build query parameters
-            params: Dict[str, Any] = {"maxResults": min(max_results, 100)}
-            
+            params: dict[str, Any] = {"maxResults": min(max_results, 100)}
+
             if report_types:
                 params["reportTypes"] = ",".join(report_types)
             if processing_statuses:
@@ -283,13 +279,11 @@ class ReportsAPIClient(BaseAPIClient):
 
             # Make API request
             result = self._make_request("GET", self.get_api_path(), params=params)
-            
+
             # Transform reports list
             reports = result.get("reports", [])
-            transformed_reports = [
-                self._transform_report_response(report) for report in reports
-            ]
-            
+            transformed_reports = [self._transform_report_response(report) for report in reports]
+
             return self._format_success_response(
                 {
                     "reports": transformed_reports,
@@ -297,7 +291,7 @@ class ReportsAPIClient(BaseAPIClient):
                 },
                 metadata={
                     "filters_applied": bool(report_types or processing_statuses or marketplace_ids),
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -309,13 +303,13 @@ class ReportsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in get_reports: {e}")
+            logger.exception(f"Unexpected error in get_reports: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
-    def _transform_report_response(self, report: Dict[str, Any]) -> Dict[str, Any]:
+    def _transform_report_response(self, report: dict[str, Any]) -> dict[str, Any]:
         """Transform raw report response to consistent format.
 
         Args:
@@ -337,7 +331,7 @@ class ReportsAPIClient(BaseAPIClient):
             "dataEndTime": report.get("dataEndTime"),
         }
 
-    def _handle_http_error(self, error: requests.HTTPError) -> Dict[str, Any]:
+    def _handle_http_error(self, error: requests.HTTPError) -> dict[str, Any]:
         """Handle HTTP errors from SP-API.
 
         Args:
@@ -351,12 +345,10 @@ class ReportsAPIClient(BaseAPIClient):
             if error.response:
                 error_response = error.response.json()
         except Exception:
-            error_response = {
-                "raw_response": error.response.text if error.response else "No response"
-            }
+            error_response = {"raw_response": error.response.text if error.response else "No response"}
 
         status_code = error.response.status_code if error.response else None
-        
+
         # Determine error code based on status
         if status_code == 401:
             error_code = "auth_failed"

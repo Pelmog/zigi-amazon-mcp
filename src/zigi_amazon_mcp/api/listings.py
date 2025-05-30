@@ -1,20 +1,17 @@
 """Listings API client for Amazon SP-API FBM operations."""
 
-import json
 import logging
-from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
+from typing import Any, Optional
 
 import requests  # type: ignore[import-untyped]
 
-from .base import BaseAPIClient
+from ..constants import API_PATHS
 from ..exceptions import RateLimitError
-from ..constants import API_PATHS, DEFAULT_RATE_LIMITS
 from ..utils.validators import (
     validate_marketplace_ids,
     validate_seller_sku,
-    validate_positive_integer,
 )
+from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +29,8 @@ class ListingsAPIClient(BaseAPIClient):
         sku: str,
         marketplace_ids: str,
         issue_locale: str = "en_US",
-        included_data: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        included_data: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
         """Get a single listing item details.
 
         Args:
@@ -49,17 +46,17 @@ class ListingsAPIClient(BaseAPIClient):
         try:
             # Validate inputs
             validation_errors = []
-            
+
             if not seller_id:
                 validation_errors.append("seller_id is required")
-                
+
             if not validate_seller_sku(sku):
                 validation_errors.append(f"Invalid SKU format: {sku}")
-            
+
             is_valid_marketplace, invalid_ids = validate_marketplace_ids(marketplace_ids)
             if not is_valid_marketplace:
                 validation_errors.append(f"Invalid marketplace IDs: {', '.join(invalid_ids)}")
-            
+
             if validation_errors:
                 return self._format_error_response(
                     "invalid_input",
@@ -77,22 +74,22 @@ class ListingsAPIClient(BaseAPIClient):
                 "marketplaceIds": marketplace_ids,
                 "issueLocale": issue_locale,
             }
-            
+
             if included_data:
                 params["includedData"] = ",".join(included_data)
 
             # Make API request
             result = self._make_request("GET", path, params=params)
-            
+
             # Transform the response
             transformed_item = self._transform_listings_item(result)
-            
+
             return self._format_success_response(
                 transformed_item,
                 metadata={
                     "marketplace": marketplace_ids.split(",")[0],
                     "seller_id": seller_id,
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -104,10 +101,10 @@ class ListingsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in get_listings_item: {e}")
+            logger.exception(f"Unexpected error in get_listings_item: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
     def patch_listings_item(
@@ -115,9 +112,9 @@ class ListingsAPIClient(BaseAPIClient):
         seller_id: str,
         sku: str,
         marketplace_ids: str,
-        patches: List[Dict[str, Any]],
+        patches: list[dict[str, Any]],
         issue_locale: str = "en_US",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update a listing item with patch operations.
 
         Args:
@@ -133,20 +130,20 @@ class ListingsAPIClient(BaseAPIClient):
         try:
             # Validate inputs
             validation_errors = []
-            
+
             if not seller_id:
                 validation_errors.append("seller_id is required")
-                
+
             if not validate_seller_sku(sku):
                 validation_errors.append(f"Invalid SKU format: {sku}")
-            
+
             is_valid_marketplace, invalid_ids = validate_marketplace_ids(marketplace_ids)
             if not is_valid_marketplace:
                 validation_errors.append(f"Invalid marketplace IDs: {', '.join(invalid_ids)}")
-            
+
             if not patches:
                 validation_errors.append("patches list cannot be empty")
-            
+
             if validation_errors:
                 return self._format_error_response(
                     "invalid_input",
@@ -169,14 +166,14 @@ class ListingsAPIClient(BaseAPIClient):
 
             # Make API request
             result = self._make_request("PATCH", path, params=params, data=body)
-            
+
             return self._format_success_response(
                 result,
                 metadata={
                     "marketplace": marketplace_ids.split(",")[0],
                     "seller_id": seller_id,
                     "sku": sku,
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -188,13 +185,13 @@ class ListingsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in patch_listings_item: {e}")
+            logger.exception(f"Unexpected error in patch_listings_item: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
-    def _transform_listings_item(self, api_response: Dict[str, Any]) -> Dict[str, Any]:
+    def _transform_listings_item(self, api_response: dict[str, Any]) -> dict[str, Any]:
         """Transform raw Listings API response to consistent format.
 
         Args:
@@ -206,33 +203,35 @@ class ListingsAPIClient(BaseAPIClient):
         # Extract basic information
         sku = api_response.get("sku", "")
         summary = api_response.get("summaries", [{}])[0] if api_response.get("summaries") else {}
-        attributes = api_response.get("attributes", {})
+        api_response.get("attributes", {})
         offers = api_response.get("offers", [])
         fulfillment_availability = api_response.get("fulfillmentAvailability", [])
-        
+
         # Extract product details
         product_name = summary.get("itemName", "")
         asin = summary.get("asin", "")
         condition = summary.get("condition", "Unknown")
-        
+
         # Extract FBM fulfillment availability
         fbm_availability = None
         for availability in fulfillment_availability:
             if availability.get("fulfillmentChannelCode") == "DEFAULT":  # FBM indicator
                 fbm_availability = availability
                 break
-        
+
         # Build transformed response
         transformed = {
             "sku": sku,
             "asin": asin,
             "product_name": product_name,
             "condition": condition,
-            "listing_status": summary.get("status", []) if isinstance(summary.get("status"), list) else summary.get("status", "Unknown"),
+            "listing_status": summary.get("status", [])
+            if isinstance(summary.get("status"), list)
+            else summary.get("status", "Unknown"),
             "created_date": summary.get("createdDate"),
             "last_updated": summary.get("lastUpdatedDate"),
         }
-        
+
         # Add pricing information if available
         if offers:
             offer = offers[0]  # Take first offer
@@ -240,7 +239,7 @@ class ListingsAPIClient(BaseAPIClient):
                 "amount": offer.get("price", {}).get("amount"),
                 "currency": offer.get("price", {}).get("currency"),
             }
-        
+
         # Add FBM fulfillment information
         if fbm_availability:
             transformed["fulfillment_availability"] = {
@@ -259,7 +258,7 @@ class ListingsAPIClient(BaseAPIClient):
                 "handling_time": None,
                 "restock_date": None,
             }
-        
+
         # Add any issues/warnings
         issues = api_response.get("issues", [])
         if issues:
@@ -271,10 +270,10 @@ class ListingsAPIClient(BaseAPIClient):
                 }
                 for issue in issues
             ]
-        
+
         return transformed
 
-    def _handle_http_error(self, error: requests.HTTPError) -> Dict[str, Any]:
+    def _handle_http_error(self, error: requests.HTTPError) -> dict[str, Any]:
         """Handle HTTP errors from SP-API.
 
         Args:
@@ -288,12 +287,10 @@ class ListingsAPIClient(BaseAPIClient):
             if error.response:
                 error_response = error.response.json()
         except Exception:
-            error_response = {
-                "raw_response": error.response.text if error.response else "No response"
-            }
+            error_response = {"raw_response": error.response.text if error.response else "No response"}
 
         status_code = error.response.status_code if error.response else None
-        
+
         # Determine error code based on status
         if status_code == 401:
             error_code = "auth_failed"

@@ -1,20 +1,19 @@
 """Inventory API client for Amazon SP-API interactions."""
 
-import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
 
-from .base import BaseAPIClient
-from ..exceptions import RateLimitError
 from ..constants import API_PATHS, FULFILLMENT_TYPES
+from ..exceptions import RateLimitError
 from ..utils.validators import (
-    validate_marketplace_ids, 
     validate_fulfillment_type,
+    validate_marketplace_ids,
     validate_positive_integer,
 )
+from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ class InventoryAPIClient(BaseAPIClient):
         fulfillment_type: str = "ALL",
         details: bool = True,
         max_results: int = 1000,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get inventory summaries with filtering and pagination.
 
         Args:
@@ -46,9 +45,7 @@ class InventoryAPIClient(BaseAPIClient):
         """
         try:
             # Validate inputs
-            validation_errors = self._validate_inputs(
-                marketplace_ids, fulfillment_type, max_results
-            )
+            validation_errors = self._validate_inputs(marketplace_ids, fulfillment_type, max_results)
             if validation_errors:
                 return self._format_error_response(
                     "invalid_input",
@@ -61,9 +58,7 @@ class InventoryAPIClient(BaseAPIClient):
                 return self._handle_fbm_request(marketplace_ids)
 
             # Fetch inventory data
-            inventory_data = self._fetch_inventory_with_pagination(
-                marketplace_ids, details, max_results
-            )
+            inventory_data = self._fetch_inventory_with_pagination(marketplace_ids, details, max_results)
 
             # Filter by fulfillment type if needed
             if fulfillment_type.upper() == "FBA":
@@ -71,9 +66,7 @@ class InventoryAPIClient(BaseAPIClient):
                 pass
 
             # Sort by total quantity (highest first)
-            inventory_data["inventory"].sort(
-                key=lambda x: x["total_quantity"], reverse=True
-            )
+            inventory_data["inventory"].sort(key=lambda x: x["total_quantity"], reverse=True)
 
             # Add summary statistics
             total_products = len(inventory_data["inventory"])
@@ -98,7 +91,7 @@ class InventoryAPIClient(BaseAPIClient):
                 metadata={
                     "marketplace": marketplace_ids.split(",")[0],
                     "total_api_calls": inventory_data.get("api_calls", 1),
-                }
+                },
             )
 
         except RateLimitError as e:
@@ -110,15 +103,13 @@ class InventoryAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.error(f"Unexpected error in get_inventory_summaries: {e}")
+            logger.exception(f"Unexpected error in get_inventory_summaries: {e}")
             return self._format_error_response(
                 "unexpected_error",
-                f"An unexpected error occurred: {str(e)}",
+                f"An unexpected error occurred: {e!s}",
             )
 
-    def _validate_inputs(
-        self, marketplace_ids: str, fulfillment_type: str, max_results: int
-    ) -> List[str]:
+    def _validate_inputs(self, marketplace_ids: str, fulfillment_type: str, max_results: int) -> list[str]:
         """Validate input parameters.
 
         Args:
@@ -139,8 +130,7 @@ class InventoryAPIClient(BaseAPIClient):
         # Validate fulfillment type
         if not validate_fulfillment_type(fulfillment_type):
             errors.append(
-                f"Invalid fulfillment_type: {fulfillment_type}. "
-                f"Must be one of: {', '.join(FULFILLMENT_TYPES)}"
+                f"Invalid fulfillment_type: {fulfillment_type}. Must be one of: {', '.join(FULFILLMENT_TYPES)}"
             )
 
         # Validate max_results
@@ -149,7 +139,7 @@ class InventoryAPIClient(BaseAPIClient):
 
         return errors
 
-    def _handle_fbm_request(self, marketplace_ids: str) -> Dict[str, Any]:
+    def _handle_fbm_request(self, marketplace_ids: str) -> dict[str, Any]:
         """Handle FBM-only requests with appropriate response.
 
         Args:
@@ -175,9 +165,7 @@ class InventoryAPIClient(BaseAPIClient):
             metadata={"marketplace": marketplace_ids.split(",")[0]},
         )
 
-    def _fetch_inventory_with_pagination(
-        self, marketplace_ids: str, details: bool, max_results: int
-    ) -> Dict[str, Any]:
+    def _fetch_inventory_with_pagination(self, marketplace_ids: str, details: bool, max_results: int) -> dict[str, Any]:
         """Fetch inventory data with pagination support.
 
         Args:
@@ -188,7 +176,7 @@ class InventoryAPIClient(BaseAPIClient):
         Returns:
             Dict containing inventory data and metadata
         """
-        all_inventory: List[Dict[str, Any]] = []
+        all_inventory: list[dict[str, Any]] = []
         next_token = None
         api_calls = 0
         latest_payload = {}
@@ -231,7 +219,7 @@ class InventoryAPIClient(BaseAPIClient):
             # Check for next page
             pagination = payload.get("pagination", {})
             next_token = pagination.get("nextToken") or payload.get("nextToken")
-            
+
             if not next_token or len(all_inventory) >= max_results:
                 break
 
@@ -241,7 +229,7 @@ class InventoryAPIClient(BaseAPIClient):
             "api_calls": api_calls,
         }
 
-    def _transform_inventory_item(self, item: Dict[str, Any], details: bool) -> Dict[str, Any]:
+    def _transform_inventory_item(self, item: dict[str, Any], details: bool) -> dict[str, Any]:
         """Transform raw API inventory item to consistent format.
 
         Args:
@@ -267,22 +255,16 @@ class InventoryAPIClient(BaseAPIClient):
         # Add detailed breakdown if requested
         if details:
             inventory_details = item.get("inventoryDetails", {})
-            
+
             # Extract unfulfillable quantity safely
             unfulfillable_obj = inventory_details.get("unfulfillableQuantity", {})
             unfulfillable_total = (
-                unfulfillable_obj.get("totalUnfulfillableQuantity", 0)
-                if isinstance(unfulfillable_obj, dict)
-                else 0
+                unfulfillable_obj.get("totalUnfulfillableQuantity", 0) if isinstance(unfulfillable_obj, dict) else 0
             )
 
             # Extract reserved quantity safely
             reserved_obj = inventory_details.get("reservedQuantity", {})
-            reserved_total = (
-                reserved_obj.get("totalReservedQuantity", 0)
-                if isinstance(reserved_obj, dict)
-                else 0
-            )
+            reserved_total = reserved_obj.get("totalReservedQuantity", 0) if isinstance(reserved_obj, dict) else 0
 
             transformed_item["inventory_breakdown"] = {
                 "fulfillable": inventory_details.get("fulfillableQuantity", 0),
@@ -297,7 +279,7 @@ class InventoryAPIClient(BaseAPIClient):
 
         return transformed_item
 
-    def _handle_http_error(self, error: requests.HTTPError) -> Dict[str, Any]:
+    def _handle_http_error(self, error: requests.HTTPError) -> dict[str, Any]:
         """Handle HTTP errors from SP-API.
 
         Args:
@@ -311,12 +293,10 @@ class InventoryAPIClient(BaseAPIClient):
             if error.response:
                 error_response = error.response.json()
         except Exception:
-            error_response = {
-                "raw_response": error.response.text if error.response else "No response"
-            }
+            error_response = {"raw_response": error.response.text if error.response else "No response"}
 
         status_code = error.response.status_code if error.response else None
-        
+
         # Determine error code based on status
         if status_code == 401:
             error_code = "auth_failed"

@@ -1,0 +1,57 @@
+{
+  "success": true,
+  "order": {
+    "BuyerInfo": {
+      "BuyerEmail": "2trtkxcb5mxx274@marketplace.amazon.co.uk"
+    },
+    "AmazonOrderId": "206-3872654-4798751",
+    "EarliestDeliveryDate": "2025-05-27T23:00:00Z",
+    "EarliestShipDate": "2025-05-22T23:00:00Z",
+    "SalesChannel": "Amazon.co.uk",
+    "AutomatedShippingSettings": {
+      "HasAutomatedShippingSettings": false
+    },
+    "OrderStatus": "Shipped",
+    "NumberOfItemsShipped": 1,
+    "OrderType": "StandardOrder",
+    "IsPremiumOrder": false,
+    "IsPrime": true,
+    "FulfillmentChannel": "MFN",
+    "NumberOfItemsUnshipped": 0,
+    "HasRegulatedItems": false,
+    "IsReplacementOrder": false,
+    "IsSoldByAB": false,
+    "LatestShipDate": "2025-05-23T22:59:59Z",
+    "ShipServiceLevel": "Std UK Dom_2",
+    "DefaultShipFromLocationAddress": {
+      "StateOrRegion": "Ayrshire",
+      "AddressLine1": "null",
+      "PostalCode": "KA11 4JU",
+      "City": "IRVINE",
+      "CountryCode": "GB",
+      "Name": "null"
+    },
+    "IsISPU": false,
+    "MarketplaceId": "A1F83G8C2ARO7P",
+    "LatestDeliveryDate": "2025-05-30T22:59:59Z",
+    "PurchaseDate": "2025-05-23T05:09:42Z",
+    "ShippingAddress": {
+      "PostalCode": "NP23 6HY",
+      "City": "EBBW VALE",
+      "CountryCode": "GB"
+    },
+    "IsAccessPointOrder": false,
+    "PaymentMethod": "Other",
+    "IsBusinessOrder": false,
+    "OrderTotal": {
+      "CurrencyCode": "GBP",
+      "Amount": "46.98"
+    },
+    "PaymentMethodDetails": [
+      "Standard"
+    ],
+    "IsGlobalExpressEnabled": false,
+    "LastUpdateDate": "2025-05-24T14:50:23Z",
+    "ShipmentServiceLevelCategory": "Standard"
+  }
+}

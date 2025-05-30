@@ -1,0 +1,411 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Generic record filters that work across multiple endpoints",
+    "category": "record_filters",
+    "created_at": "2025-01-30T00:00:00Z"
+  },
+  "filters": [
+    {
+      "id": "limit_results",
+      "name": "Limit Results",
+      "description": "Limit the number of results returned",
+      "category": "common",
+      "filter_type": "record",
+      "query": "limit({limit})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "limit": {
+          "type": "number",
+          "default": 10,
+          "required": false,
+          "description": "Maximum number of results to return"
+        }
+      },
+      "examples": [
+        {
+          "name": "First 10 items",
+          "description": "Return only the first 10 results",
+          "parameters": {
+            "limit": 10
+          }
+        },
+        {
+          "name": "First 50 items",
+          "description": "Return only the first 50 results",
+          "parameters": {
+            "limit": 50
+          }
+        }
+      ],
+      "tags": [
+        "limit",
+        "pagination",
+        "performance",
+        "sampling"
+      ],
+      "test_cases": [
+        {
+          "name": "limit_test",
+          "test_data": [
+            {
+              "id": "1"
+            },
+            {
+              "id": "2"
+            },
+            {
+              "id": "3"
+            },
+            {
+              "id": "4"
+            },
+            {
+              "id": "5"
+            }
+          ],
+          "expected_result": [
+            {
+              "id": "1"
+            },
+            {
+              "id": "2"
+            },
+            {
+              "id": "3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sort_by_field",
+      "name": "Sort by Field",
+      "description": "Sort results by a specified field",
+      "category": "common",
+      "filter_type": "record",
+      "query": "sort(.{sort_field}, \"{direction}\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "sort_field": {
+          "type": "string",
+          "default": "PurchaseDate",
+          "required": false,
+          "description": "Field to sort by"
+        },
+        "direction": {
+          "type": "string",
+          "default": "desc",
+          "required": false,
+          "description": "Sort direction (asc or desc)"
+        }
+      },
+      "examples": [
+        {
+          "name": "Sort by date (newest first)",
+          "description": "Sort results by date in descending order",
+          "parameters": {
+            "sort_field": "PurchaseDate",
+            "direction": "desc"
+          }
+        },
+        {
+          "name": "Sort by value (highest first)",
+          "description": "Sort by value in descending order",
+          "parameters": {
+            "sort_field": "OrderTotal.Amount",
+            "direction": "desc"
+          }
+        }
+      ],
+      "tags": [
+        "sort",
+        "order",
+        "arrangement",
+        "chronological"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "filter_by_existence",
+      "name": "Filter by Field Existence",
+      "description": "Filter items that have or don't have a specific field",
+      "category": "common",
+      "filter_type": "record",
+      "query": "filter({exists_check} exists(.{field_name}))",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "field_name": {
+          "type": "string",
+          "default": "BuyerInfo",
+          "required": false,
+          "description": "Field name to check for existence"
+        },
+        "exists_check": {
+          "type": "string",
+          "default": "",
+          "required": false,
+          "description": "Empty for 'exists', 'not' for 'not exists'"
+        }
+      },
+      "examples": [
+        {
+          "name": "Items with buyer info",
+          "description": "Filter items that have buyer information",
+          "parameters": {
+            "field_name": "BuyerInfo",
+            "exists_check": ""
+          }
+        },
+        {
+          "name": "Items without description",
+          "description": "Filter items missing description",
+          "parameters": {
+            "field_name": "description",
+            "exists_check": "not"
+          }
+        }
+      ],
+      "tags": [
+        "existence",
+        "validation",
+        "completeness",
+        "fields"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "numeric_range_filter",
+      "name": "Numeric Range Filter",
+      "description": "Filter items within a numeric range",
+      "category": "common",
+      "filter_type": "record",
+      "query": "filter((.{field_name} >= {min_value}) and (.{field_name} <= {max_value}))",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "field_name": {
+          "type": "string",
+          "default": "OrderTotal.Amount",
+          "required": false,
+          "description": "Numeric field to filter"
+        },
+        "min_value": {
+          "type": "number",
+          "default": 0,
+          "required": false,
+          "description": "Minimum value (inclusive)"
+        },
+        "max_value": {
+          "type": "number",
+          "default": 1000,
+          "required": false,
+          "description": "Maximum value (inclusive)"
+        }
+      },
+      "examples": [
+        {
+          "name": "Order value range \u00a350-\u00a3200",
+          "description": "Filter orders between \u00a350 and \u00a3200",
+          "parameters": {
+            "field_name": "OrderTotal.Amount",
+            "min_value": 50,
+            "max_value": 200
+          }
+        },
+        {
+          "name": "Inventory quantity 10-100",
+          "description": "Filter inventory with 10-100 units",
+          "parameters": {
+            "field_name": "totalQuantity",
+            "min_value": 10,
+            "max_value": 100
+          }
+        }
+      ],
+      "tags": [
+        "range",
+        "numeric",
+        "between",
+        "boundaries"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "text_contains_filter",
+      "name": "Text Contains Filter",
+      "description": "Filter items where text field contains specific substring",
+      "category": "common",
+      "filter_type": "record",
+      "query": "filter(regex(.{field_name}, \"{search_text}\", \"i\"))",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "field_name": {
+          "type": "string",
+          "default": "productName",
+          "required": false,
+          "description": "Text field to search in"
+        },
+        "search_text": {
+          "type": "string",
+          "default": "",
+          "required": false,
+          "description": "Text to search for (case-insensitive)"
+        }
+      },
+      "examples": [
+        {
+          "name": "Products containing 'iPhone'",
+          "description": "Find products with iPhone in the name",
+          "parameters": {
+            "field_name": "productName",
+            "search_text": "iPhone"
+          }
+        },
+        {
+          "name": "SKUs containing 'ELEC'",
+          "description": "Find SKUs with ELEC prefix",
+          "parameters": {
+            "field_name": "sellerSku",
+            "search_text": "ELEC"
+          }
+        }
+      ],
+      "tags": [
+        "text",
+        "search",
+        "contains",
+        "substring"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "date_range_filter",
+      "name": "Date Range Filter",
+      "description": "Filter items within specified date range",
+      "category": "common",
+      "filter_type": "record",
+      "query": "filter((.{date_field} >= \"{start_date}\") and (.{date_field} <= \"{end_date}\"))",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "date_field": {
+          "type": "string",
+          "default": "PurchaseDate",
+          "required": false,
+          "description": "Date field to filter on"
+        },
+        "start_date": {
+          "type": "string",
+          "default": "2025-01-01T00:00:00Z",
+          "required": false,
+          "description": "Start date (ISO format)"
+        },
+        "end_date": {
+          "type": "string",
+          "default": "2025-12-31T23:59:59Z",
+          "required": false,
+          "description": "End date (ISO format)"
+        }
+      },
+      "examples": [
+        {
+          "name": "Orders from January 2025",
+          "description": "Filter orders from January 2025",
+          "parameters": {
+            "date_field": "PurchaseDate",
+            "start_date": "2025-01-01T00:00:00Z",
+            "end_date": "2025-01-31T23:59:59Z"
+          }
+        }
+      ],
+      "tags": [
+        "date",
+        "time",
+        "range",
+        "temporal"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "random_sample",
+      "name": "Random Sample",
+      "description": "Get a random sample of items",
+      "category": "common",
+      "filter_type": "record",
+      "query": "shuffle | limit({sample_size})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "sample_size": {
+          "type": "number",
+          "default": 10,
+          "required": false,
+          "description": "Number of random items to return"
+        }
+      },
+      "examples": [
+        {
+          "name": "Random 10 items",
+          "description": "Get 10 random items for sampling",
+          "parameters": {
+            "sample_size": 10
+          }
+        },
+        {
+          "name": "Random 5% sample",
+          "description": "Get a small random sample",
+          "parameters": {
+            "sample_size": 5
+          }
+        }
+      ],
+      "tags": [
+        "random",
+        "sample",
+        "testing",
+        "analysis"
+      ],
+      "test_cases": []
+    }
+  ]
+}

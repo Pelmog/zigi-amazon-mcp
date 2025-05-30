@@ -1,0 +1,286 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Field reduction filters for Amazon Inventory API - significant data size reduction",
+    "category": "field_filters",
+    "created_at": "2025-01-30T00:00:00Z",
+    "estimated_total_reduction": "75-95%"
+  },
+  "filters": [
+    {
+      "id": "inventory_summary",
+      "name": "Inventory Summary Only",
+      "description": "Return only SKU, ASIN, and total quantity - 92% data reduction",
+      "category": "inventory",
+      "filter_type": "field",
+      "query": "(.inventorySummaries // .) | map({sku: .sellerSku, asin: .asin, quantity: .totalQuantity})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 92,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Basic inventory overview",
+          "description": "Get just the essential inventory counts",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "summary",
+        "minimal",
+        "stock",
+        "overview"
+      ],
+      "test_cases": [
+        {
+          "name": "inventory_summary_test",
+          "test_data": {
+            "inventorySummaries": [
+              {
+                "sellerSku": "SKU-001",
+                "asin": "B08XYZ123",
+                "totalQuantity": 150,
+                "condition": "NewItem",
+                "inventoryDetails": {
+                  "fulfillableQuantity": 145
+                }
+              }
+            ]
+          },
+          "expected_result": [
+            {
+              "sku": "SKU-001",
+              "asin": "B08XYZ123",
+              "quantity": 150
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inventory_stock_levels",
+      "name": "Inventory Stock Levels",
+      "description": "Stock levels and fulfillable quantities only - 75% reduction",
+      "category": "inventory",
+      "filter_type": "field",
+      "query": "(.inventorySummaries // .) | map({sku: .sellerSku, totalQuantity: .totalQuantity, fulfillable: .inventoryDetails.fulfillableQuantity, reserved: .inventoryDetails.reservedQuantity.totalReservedQuantity, lastUpdated: .lastUpdatedTime})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 75,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Stock management",
+          "description": "Focus on quantities for inventory management",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "stock",
+        "fulfillable",
+        "reserved",
+        "management"
+      ],
+      "test_cases": [
+        {
+          "name": "stock_levels_test",
+          "test_data": {
+            "inventorySummaries": [
+              {
+                "sellerSku": "SKU-001",
+                "totalQuantity": 150,
+                "inventoryDetails": {
+                  "fulfillableQuantity": 145,
+                  "reservedQuantity": {
+                    "totalReservedQuantity": 5
+                  }
+                },
+                "lastUpdatedTime": "2025-01-30T10:30:00Z"
+              }
+            ]
+          },
+          "expected_result": [
+            {
+              "sku": "SKU-001",
+              "totalQuantity": 150,
+              "fulfillable": 145,
+              "reserved": 5,
+              "lastUpdated": "2025-01-30T10:30:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inventory_value_analysis",
+      "name": "Inventory Value Analysis",
+      "description": "SKU, quantity, and estimated value only - 85% reduction",
+      "category": "inventory",
+      "filter_type": "field",
+      "query": "(.inventorySummaries // .) | map({sku: .sellerSku, quantity: .totalQuantity, estimatedValue: .estimatedValue.value, currency: .estimatedValue.currency, valuePerUnit: (if .totalQuantity > 0 then (.estimatedValue.value / .totalQuantity) else 0 end)})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 85,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Financial inventory analysis",
+          "description": "Focus on inventory valuation",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "value",
+        "financial",
+        "valuation",
+        "analysis"
+      ],
+      "test_cases": [
+        {
+          "name": "value_analysis_test",
+          "test_data": {
+            "inventorySummaries": [
+              {
+                "sellerSku": "SKU-001",
+                "totalQuantity": 100,
+                "estimatedValue": {
+                  "value": 1500.0,
+                  "currency": "GBP"
+                }
+              }
+            ]
+          },
+          "expected_result": [
+            {
+              "sku": "SKU-001",
+              "quantity": 100,
+              "estimatedValue": 1500.0,
+              "currency": "GBP",
+              "valuePerUnit": 15.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inventory_fulfillment_status",
+      "name": "Inventory Fulfillment Status",
+      "description": "Fulfillment channel and availability status - 80% reduction",
+      "category": "inventory",
+      "filter_type": "field",
+      "query": "(.inventorySummaries // .) | map({sku: .sellerSku, asin: .asin, condition: .condition, fnSku: .fnSku, fulfillableQuantity: .inventoryDetails.fulfillableQuantity, inboundQuantity: .inventoryDetails.inboundShippedQuantity})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 80,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Fulfillment overview",
+          "description": "Focus on FBA fulfillment data",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "fulfillment",
+        "fba",
+        "availability",
+        "inbound"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "inventory_product_info",
+      "name": "Inventory Product Information",
+      "description": "Product identifiers and names only - 88% reduction",
+      "category": "inventory",
+      "filter_type": "field",
+      "query": "(.inventorySummaries // .) | map({sku: .sellerSku, asin: .asin, fnSku: .fnSku, productName: .productName, condition: .condition})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 88,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Product catalog view",
+          "description": "Focus on product identification",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "product",
+        "catalog",
+        "identifiers",
+        "names"
+      ],
+      "test_cases": [
+        {
+          "name": "product_info_test",
+          "test_data": {
+            "inventorySummaries": [
+              {
+                "sellerSku": "SKU-001",
+                "asin": "B08XYZ123",
+                "fnSku": "X000ABC123",
+                "productName": "Example Product",
+                "condition": "NewItem"
+              }
+            ]
+          },
+          "expected_result": [
+            {
+              "sku": "SKU-001",
+              "asin": "B08XYZ123",
+              "fnSku": "X000ABC123",
+              "productName": "Example Product",
+              "condition": "NewItem"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inventory_alerts_data",
+      "name": "Inventory Alerts Data",
+      "description": "Data needed for low stock and reorder alerts - 70% reduction",
+      "category": "inventory",
+      "filter_type": "field",
+      "query": "(.inventorySummaries // .) | map({sku: .sellerSku, productName: .productName, totalQuantity: .totalQuantity, fulfillableQuantity: .inventoryDetails.fulfillableQuantity, unfulfillableQuantity: .inventoryDetails.unfulfillableQuantity, lastUpdated: .lastUpdatedTime})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 70,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Stock alerts",
+          "description": "Data for automated inventory alerts",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "alerts",
+        "monitoring",
+        "reorder",
+        "automation"
+      ],
+      "test_cases": []
+    }
+  ]
+}

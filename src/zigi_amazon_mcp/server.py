@@ -17,16 +17,17 @@ from dotenv import load_dotenv
 from fastmcp import FastMCP
 from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
 
+from .api.feeds import FeedsAPIClient
 from .api.inventory import InventoryAPIClient
 from .api.listings import ListingsAPIClient
 from .api.reports import ReportsAPIClient
-from .api.feeds import FeedsAPIClient
-from .utils.decorators import handle_sp_api_errors, cached_api_call
+from .filtering import FilterManager
+from .utils.decorators import cached_api_call, handle_sp_api_errors
 from .utils.validators import (
-    validate_seller_sku,
-    validate_handling_time,
-    validate_fbm_quantity,
     validate_bulk_inventory_updates,
+    validate_fbm_quantity,
+    validate_handling_time,
+    validate_seller_sku,
 )
 
 # Load environment variables from .env file
@@ -44,6 +45,60 @@ session_store: dict[str, str] = {}
 # Auth token storage - stores valid authentication tokens
 auth_tokens: set[str] = set()
 
+# Filter manager for JSON filtering and data reduction
+filter_manager = FilterManager()
+
+
+def initialize_filter_database():
+    """Initialize and seed the filter database with predefined filters."""
+    try:
+        from pathlib import Path
+
+        from .filtering import FilterLibrary
+
+        filter_lib = FilterLibrary()
+
+        # Get the seed data directory
+        seed_data_dir = Path(__file__).parent / "filtering" / "seed_data"
+
+        # Import all seed data files
+        seed_files = [
+            "order_filters.json",
+            "order_field_filters.json",
+            "inventory_filters.json",
+            "inventory_field_filters.json",
+            "common_filters.json",
+            "common_field_filters.json",
+            "filter_chains.json",
+        ]
+
+        imported_total = 0
+        for seed_file in seed_files:
+            file_path = seed_data_dir / seed_file
+            if file_path.exists():
+                result = filter_lib.import_filters_from_json(str(file_path))
+                if result["success"]:
+                    imported_total += result["imported_count"]
+                    print(f"Imported {result['imported_count']} filters from {seed_file}")
+                else:
+                    print(f"Warning: Failed to import {seed_file}: {result.get('error', 'Unknown error')}")
+            else:
+                print(f"Warning: Seed file {seed_file} not found")
+
+        print(f"Filter database initialization complete. Total filters imported: {imported_total}")
+
+        # Get database stats
+        stats = filter_lib.get_database_stats()
+        if stats.get("status") == "healthy":
+            print(f"Database health check: {stats['total_filters']} total filters, {stats['chain_filters']} chains")
+
+    except Exception as e:
+        print(f"Warning: Failed to initialize filter database: {e}")
+
+
+# Initialize the filter database on startup
+initialize_filter_database()
+
 
 def validate_auth_token(token: str) -> bool:
     """Validate if the provided auth token is valid."""
@@ -52,9 +107,15 @@ def validate_auth_token(token: str) -> bool:
 
 def get_amazon_access_token() -> str | None:
     """Exchange refresh token for access token from Amazon LWA."""
-    client_id = os.getenv("LWA_CLIENT_ID")
+    client_id = os.getenv("LWA_CLIENT_ID")  # "amzn1.application-oa2-client.f780ac6b975e4abe85bbd8ee2bb7b137"  #
     client_secret = os.getenv("LWA_CLIENT_SECRET")
     refresh_token = os.getenv("LWA_REFRESH_TOKEN")
+
+    # Save environment variables to debug file
+    with open("debug-nonsense.log", "w") as f:
+        f.write(f"LWA_CLIENT_ID: {client_id}\n")
+        f.write(f"LWA_CLIENT_SECRET: {client_secret}\n")
+        f.write(f"LWA_REFRESH_TOKEN: {refresh_token}\n")
 
     if not all([client_id, client_secret, refresh_token]):
         raise ValueError(
@@ -74,7 +135,7 @@ def get_amazon_access_token() -> str | None:
         token_data = response.json()
         return str(token_data["access_token"])
     else:
-        return None
+        raise ValueError(f"LWA token request failed: {response.status_code} - {response.text}")
 
 
 def get_amazon_aws_credentials() -> dict[str, str] | None:
@@ -141,7 +202,8 @@ def get_auth_token() -> str:
 @mcp.tool()
 def hello_world(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     name: Annotated[str, "Name to greet"] = "World",
 ) -> str:
@@ -156,13 +218,61 @@ def hello_world(
 
 
 @mcp.tool()
+def get_available_filters(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    endpoint: Annotated[
+        str,
+        "MCP endpoint name to filter by (e.g., 'get_orders', 'get_inventory_in_stock'). Leave empty for all endpoints.",
+    ] = "",
+    category: Annotated[
+        str, "Filter category to filter by (e.g., 'orders', 'inventory', 'common'). Leave empty for all categories."
+    ] = "",
+    filter_type: Annotated[
+        str,
+        "Filter type to filter by: 'record' (reduce number of items), 'field' (reduce data per item), 'chain' (predefined combinations). Leave empty for all types.",
+    ] = "",
+    search_term: Annotated[
+        str, "Search term to find relevant filters by name or description. Leave empty for no search filtering."
+    ] = "",
+) -> str:
+    """Get available filters for discovering and applying data reduction to API responses.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This tool helps you discover filters that can dramatically reduce API response sizes:
+    - Record filters: Reduce the number of items returned (e.g., high-value orders only)
+    - Field filters: Reduce data within each item (e.g., order summary with just ID, status, total)
+    - Chain filters: Combine multiple filters for maximum data reduction (e.g., high-value orders + summary data = 98% reduction)
+
+    Use the returned filter IDs with the filter_id or filter_chain parameters in other tools like get_orders() or get_inventory_in_stock().
+    """
+    if not validate_auth_token(auth_token):
+        return "Error: Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token."
+
+    try:
+        result = filter_manager.get_available_filters(
+            endpoint=endpoint, category=category, filter_type=filter_type, search_term=search_term
+        )
+
+        return json.dumps(result, indent=2)
+
+    except Exception as e:
+        return f"Error retrieving available filters: {e!s}"
+
+
+@mcp.tool()
 def process_text(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     text: Annotated[str, "The text to process"],
     operation: Annotated[
-        str, "The operation to perform on the text: uppercase, lowercase, reverse, count_words, count_chars"
+        str,
+        "The operation to perform on the text: uppercase, lowercase, reverse, count_words, count_chars",
     ],
 ) -> str:
     """Process text with various operations.
@@ -189,7 +299,8 @@ def process_text(
 @mcp.tool()
 def read_file(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     file_path: Annotated[str, "Path to the file to read"],
     encoding: Annotated[str, "File encoding"] = "utf-8",
@@ -216,7 +327,8 @@ def read_file(
 @mcp.tool()
 def write_file(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     file_path: Annotated[str, "Path to the file to write"],
     content: Annotated[str, "Content to write to the file"],
@@ -248,7 +360,8 @@ def write_file(
 @mcp.tool()
 def json_process(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     data: Annotated[str, "JSON string to parse or object to format"],
     operation: Annotated[str, "Operation to perform: parse, format, validate"],
@@ -290,7 +403,8 @@ def json_process(
 @mcp.tool()
 def convert_data(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     data: Annotated[str, "Data to convert"],
     from_format: Annotated[str, "Source format: text, base64, hex"],
@@ -332,7 +446,8 @@ def convert_data(
 @mcp.tool()
 def store_session_data(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     session_id: Annotated[str, "Unique session identifier for data storage"],
     data: Annotated[str, "Data to store in the session"],
@@ -354,7 +469,8 @@ def store_session_data(
 @mcp.tool()
 def get_session_data(
     auth_token: Annotated[
-        str, "Authentication token obtained from get_auth_token(). Required for this function to work."
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
     ],
     session_id: Annotated[str, "Unique session identifier to retrieve data for"],
 ) -> str:
@@ -391,6 +507,17 @@ def get_orders(
     max_results: Annotated[int, "Maximum number of orders to retrieve (default 100)"] = 100,
     region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
     endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+    filter_id: Annotated[
+        str,
+        "Filter ID from database to apply to results (use get_available_filters to discover). Reduces response size dramatically.",
+    ] = "",
+    filter_chain: Annotated[
+        str,
+        "Comma-separated chain of filter IDs for complex data reduction (e.g., 'high_value_orders,order_summary' for 98% reduction)",
+    ] = "",
+    custom_filter: Annotated[str, "Custom JSON Query expression for advanced filtering"] = "",
+    filter_params: Annotated[str, "JSON string of filter parameters (e.g., '{\"threshold\": 100.0}')"] = "{}",
+    reduce_response: Annotated[bool, "Apply default data reduction filter to minimize response size"] = False,
 ) -> str:
     """Retrieve multiple orders from Amazon Seller Central using the SP-API.
 
@@ -500,6 +627,34 @@ def get_orders(
             # Log error but don't fail the main operation
             print(f"Warning: Failed to save JSON file: {e}")
 
+        # Apply filtering if requested
+        if filter_id or filter_chain or custom_filter or reduce_response:
+            try:
+                filter_result = filter_manager.apply_enhanced_filtering(
+                    data=response_data["orders"],
+                    filter_id=filter_id,
+                    filter_chain=filter_chain,
+                    custom_filter=custom_filter,
+                    filter_params=filter_params,
+                    reduce_response=reduce_response,
+                    endpoint="get_orders",
+                )
+
+                if filter_result["success"]:
+                    # Update response with filtered data and metadata
+                    response_data["orders"] = filter_result["data"]
+                    response_data["orders_retrieved"] = (
+                        len(filter_result["data"]) if isinstance(filter_result["data"], list) else 1
+                    )
+                    response_data["filtering"] = filter_result["metadata"]
+                else:
+                    # Include filtering error but don't fail the request
+                    response_data["filtering_error"] = filter_result.get("message", "Unknown filtering error")
+
+            except Exception as e:
+                # Include filtering error but don't fail the request
+                response_data["filtering_error"] = f"Filter application failed: {e!s}"
+
         return json.dumps(response_data, indent=2)
 
     except Exception as e:
@@ -603,14 +758,27 @@ def get_inventory_in_stock(
         str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
     ] = "A1F83G8C2ARO7P",
     fulfillment_type: Annotated[
-        str, "Filter by fulfillment type: 'FBA' (Fulfilled by Amazon), 'FBM' (Fulfilled by Merchant), or 'ALL' (both)"
+        str,
+        "Filter by fulfillment type: 'FBA' (Fulfilled by Amazon), 'FBM' (Fulfilled by Merchant), or 'ALL' (both)",
     ] = "ALL",
     details: Annotated[
-        bool, "Include detailed inventory breakdown (fulfillable, unfulfillable, reserved, inbound)"
+        bool,
+        "Include detailed inventory breakdown (fulfillable, unfulfillable, reserved, inbound)",
     ] = True,
     max_results: Annotated[int, "Maximum number of inventory items to return (default 1000)"] = 1000,
     region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
     endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+    filter_id: Annotated[
+        str,
+        "Filter ID from database to apply to results (use get_available_filters to discover). Reduces response size dramatically.",
+    ] = "",
+    filter_chain: Annotated[
+        str,
+        "Comma-separated chain of filter IDs for complex data reduction (e.g., 'low_stock_alert,inventory_summary' for 95% reduction)",
+    ] = "",
+    custom_filter: Annotated[str, "Custom JSON Query expression for advanced filtering"] = "",
+    filter_params: Annotated[str, "JSON string of filter parameters (e.g., '{\"threshold\": 10}')"] = "{}",
+    reduce_response: Annotated[bool, "Apply default data reduction filter to minimize response size"] = False,
 ) -> str:
     """Retrieve all products currently in stock with their inventory information.
 
@@ -634,40 +802,49 @@ def get_inventory_in_stock(
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 2. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get Amazon access token. Check your LWA credentials.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 3. Use InventoryAPIClient
     client = InventoryAPIClient(access_token, aws_creds, region, endpoint)
@@ -680,7 +857,39 @@ def get_inventory_in_stock(
         max_results=max_results,
     )
 
-    # 5. Return formatted JSON
+    # 5. Apply filtering if requested
+    if filter_id or filter_chain or custom_filter or reduce_response:
+        try:
+            # Extract inventory data for filtering
+            inventory_data = result.get("data", {}).get("inventorySummaries", [])
+
+            filter_result = filter_manager.apply_enhanced_filtering(
+                data=inventory_data,
+                filter_id=filter_id,
+                filter_chain=filter_chain,
+                custom_filter=custom_filter,
+                filter_params=filter_params,
+                reduce_response=reduce_response,
+                endpoint="get_inventory_in_stock",
+            )
+
+            if filter_result["success"]:
+                # Update result with filtered data and metadata
+                if "data" in result and "inventorySummaries" in result["data"]:
+                    result["data"]["inventorySummaries"] = filter_result["data"]
+                    result["data"]["totalCount"] = (
+                        len(filter_result["data"]) if isinstance(filter_result["data"], list) else 1
+                    )
+                result["filtering"] = filter_result["metadata"]
+            else:
+                # Include filtering error but don't fail the request
+                result["filtering_error"] = filter_result.get("message", "Unknown filtering error")
+
+        except Exception as e:
+            # Include filtering error but don't fail the request
+            result["filtering_error"] = f"Filter application failed: {e!s}"
+
+    # 6. Return formatted JSON
     return json.dumps(result, indent=2)
 
 
@@ -694,14 +903,13 @@ def get_fbm_inventory(
     ],
     seller_id: Annotated[str, "The seller ID for the merchant account"],
     seller_sku: Annotated[
-        str, "Specific SKU to retrieve. If not provided, use get_fbm_inventory_report for bulk data"
+        str,
+        "Specific SKU to retrieve. If not provided, use get_fbm_inventory_report for bulk data",
     ],
     marketplace_ids: Annotated[
         str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
     ] = "A1F83G8C2ARO7P",
-    include_inactive: Annotated[
-        bool, "Include inactive listings in the results"
-    ] = False,
+    include_inactive: Annotated[bool, "Include inactive listings in the results"] = False,
     region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
     endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
 ) -> str:
@@ -724,63 +932,78 @@ def get_fbm_inventory(
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 2. Validate inputs
     if not seller_id:
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": "seller_id is required",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "seller_id is required",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     if not validate_seller_sku(seller_sku):
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": "Invalid SKU format",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "Invalid SKU format",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get Amazon access token. Check your LWA credentials.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 4. Use ListingsAPIClient
     client = ListingsAPIClient(access_token, aws_creds, region, endpoint)
@@ -806,17 +1029,13 @@ def get_fbm_inventory_report(
     ],
     report_type: Annotated[
         str,
-        "Report type: 'ALL_DATA' (all listings), 'ACTIVE' (active only), or 'INACTIVE' (inactive only)"
+        "Report type: 'ALL_DATA' (all listings), 'ACTIVE' (active only), or 'INACTIVE' (inactive only)",
     ] = "ALL_DATA",
     marketplace_ids: Annotated[
         str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
     ] = "A1F83G8C2ARO7P",
-    start_date: Annotated[
-        Optional[str], "ISO 8601 format start date for the report data"
-    ] = None,
-    end_date: Annotated[
-        Optional[str], "ISO 8601 format end date for the report data"
-    ] = None,
+    start_date: Annotated[Optional[str], "ISO 8601 format start date for the report data"] = None,
+    end_date: Annotated[Optional[str], "ISO 8601 format end date for the report data"] = None,
     region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
     endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
 ) -> str:
@@ -829,7 +1048,7 @@ def get_fbm_inventory_report(
 
     Report types:
     - 'ALL_DATA': GET_MERCHANT_LISTINGS_ALL_DATA - All listings
-    - 'ACTIVE': GET_MERCHANT_LISTINGS_DATA - Active listings only  
+    - 'ACTIVE': GET_MERCHANT_LISTINGS_DATA - Active listings only
     - 'INACTIVE': GET_MERCHANT_LISTINGS_INACTIVE_DATA - Inactive listings only
 
     Note: This function creates the report request. The report generation is asynchronous.
@@ -845,15 +1064,18 @@ def get_fbm_inventory_report(
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 2. Map report type
     report_type_map = {
@@ -863,40 +1085,49 @@ def get_fbm_inventory_report(
     }
 
     if report_type not in report_type_map:
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": f"Invalid report_type. Must be one of: {', '.join(report_type_map.keys())}",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": f"Invalid report_type. Must be one of: {', '.join(report_type_map.keys())}",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get Amazon access token. Check your LWA credentials.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 4. Use ReportsAPIClient
     client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
@@ -924,11 +1155,10 @@ def update_fbm_inventory(
     seller_sku: Annotated[str, "SKU to update"],
     quantity: Annotated[int, "New quantity available (must be >= 0)"],
     handling_time: Annotated[
-        Optional[int], "Days to ship (1-30). If not provided, existing value is retained"
+        Optional[int],
+        "Days to ship (1-30). If not provided, existing value is retained",
     ] = None,
-    restock_date: Annotated[
-        Optional[str], "ISO 8601 format restock date (must be in the future)"
-    ] = None,
+    restock_date: Annotated[Optional[str], "ISO 8601 format restock date (must be in the future)"] = None,
     marketplace_ids: Annotated[
         str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
     ] = "A1F83G8C2ARO7P",
@@ -957,15 +1187,18 @@ def update_fbm_inventory(
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 2. Validate inputs
     validation_errors = []
@@ -983,41 +1216,50 @@ def update_fbm_inventory(
         validation_errors.append("Handling time must be between 1-30 days")
 
     if validation_errors:
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": "Input validation failed",
-            "details": validation_errors,
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "Input validation failed",
+                "details": validation_errors,
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get Amazon access token. Check your LWA credentials.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 4. Build patch operations
     patches = []
@@ -1038,7 +1280,7 @@ def update_fbm_inventory(
     patches.append({
         "op": "replace",
         "path": "/attributes/fulfillment_availability",
-        "value": [fulfillment_data]
+        "value": [fulfillment_data],
     })
 
     # 5. Use ListingsAPIClient
@@ -1065,11 +1307,9 @@ def bulk_update_fbm_inventory(
     ],
     inventory_updates: Annotated[
         str,
-        "JSON array of inventory updates. Each item must have: sku, quantity, and optionally handling_time and restock_date"
+        "JSON array of inventory updates. Each item must have: sku, quantity, and optionally handling_time and restock_date",
     ],
-    marketplace_id: Annotated[
-        str, "Target marketplace ID (e.g., 'A1F83G8C2ARO7P' for UK)"
-    ] = "A1F83G8C2ARO7P",
+    marketplace_id: Annotated[str, "Target marketplace ID (e.g., 'A1F83G8C2ARO7P' for UK)"] = "A1F83G8C2ARO7P",
     region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
     endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
 ) -> str:
@@ -1103,68 +1343,83 @@ def bulk_update_fbm_inventory(
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 2. Parse and validate inventory updates
     try:
         updates = json.loads(inventory_updates)
     except json.JSONDecodeError:
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": "inventory_updates must be a valid JSON array",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "inventory_updates must be a valid JSON array",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # Validate updates
     is_valid, errors = validate_bulk_inventory_updates(updates)
     if not is_valid:
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": "Validation failed for inventory updates",
-            "details": errors,
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "Validation failed for inventory updates",
+                "details": errors,
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get Amazon access token. Check your LWA credentials.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 4. Use FeedsAPIClient
     client = FeedsAPIClient(access_token, aws_creds, region, endpoint)
@@ -1241,15 +1496,18 @@ def update_product_price(
     """
     # 1. Validate auth token
     if not validate_auth_token(auth_token):
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 2. Validate inputs
     validation_errors = []
@@ -1272,41 +1530,50 @@ def update_product_price(
         validation_errors.append(f"Unsupported currency: {currency}")
 
     if validation_errors:
-        return json.dumps({
-            "success": False,
-            "error": "invalid_input",
-            "message": "Input validation failed",
-            "details": validation_errors,
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "Input validation failed",
+                "details": validation_errors,
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 3. Get credentials
     access_token = get_amazon_access_token()
     if not access_token:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get Amazon access token. Check your LWA credentials.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     aws_creds = get_amazon_aws_credentials()
     if not aws_creds:
-        return json.dumps({
-            "success": False,
-            "error": "auth_failed",
-            "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
-            "metadata": {
-                "timestamp": datetime.now().isoformat() + "Z",
-                "request_id": str(uuid.uuid4()),
-            }
-        }, indent=2)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
 
     # 4. Build patch operations for price update
     patches = [
@@ -1316,17 +1583,9 @@ def update_product_price(
             "value": [
                 {
                     "audience": "ALL",
-                    "our_price": [
-                        {
-                            "schedule": [
-                                {
-                                    "value_with_tax": new_price
-                                }
-                            ]
-                        }
-                    ]
+                    "our_price": [{"schedule": [{"value_with_tax": new_price}]}],
                 }
-            ]
+            ],
         }
     ]
 
@@ -1342,12 +1601,12 @@ def update_product_price(
     )
 
     # 7. Add price info to success response
-    if result.get('success'):
-        result['price_update'] = {
+    if result.get("success"):
+        result["price_update"] = {
             "sku": seller_sku,
             "new_price": f"{currency} {new_price}",
             "marketplace": marketplace_ids,
-            "note": "Price updates typically take 5-15 minutes to reflect on Amazon"
+            "note": "Price updates typically take 5-15 minutes to reflect on Amazon",
         }
 
     # 8. Return formatted JSON

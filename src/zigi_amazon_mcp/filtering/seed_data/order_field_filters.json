@@ -1,0 +1,309 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Field reduction filters for Amazon Orders API - dramatic data size reduction",
+    "category": "field_filters",
+    "created_at": "2025-01-30T00:00:00Z",
+    "estimated_total_reduction": "85-99%"
+  },
+  "filters": [
+    {
+      "id": "order_summary",
+      "name": "Order Summary Only",
+      "description": "Return only order ID, status, and total amount - 95% data reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "map({orderId: .AmazonOrderId, status: .OrderStatus, total: .OrderTotal.Amount, currency: .OrderTotal.CurrencyCode})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 95,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Basic order summary",
+          "description": "Extract just the essential order information",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "summary",
+        "minimal",
+        "essential",
+        "reduction",
+        "finance"
+      ],
+      "test_cases": [
+        {
+          "name": "single_order_test",
+          "test_data": {
+            "AmazonOrderId": "123-1234567-1234567",
+            "OrderStatus": "Shipped",
+            "OrderTotal": {
+              "Amount": "89.99",
+              "CurrencyCode": "GBP"
+            },
+            "PurchaseDate": "2025-01-30T10:00:00Z",
+            "LastUpdateDate": "2025-01-30T11:00:00Z"
+          },
+          "expected_result": {
+            "orderId": "123-1234567-1234567",
+            "status": "Shipped",
+            "total": "89.99",
+            "currency": "GBP"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order_essentials",
+      "name": "Order Essentials",
+      "description": "Key order information without addresses and detailed items - 85% reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "map({orderId: .AmazonOrderId, status: .OrderStatus, purchaseDate: .PurchaseDate, total: .OrderTotal, itemCount: .NumberOfItemsShipped, isPrime: .IsPrime, salesChannel: .SalesChannel})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 85,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Essential order details",
+          "description": "Get important order info without bulk data",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "essential",
+        "business",
+        "overview",
+        "reduction"
+      ],
+      "test_cases": [
+        {
+          "name": "order_essentials_test",
+          "test_data": {
+            "AmazonOrderId": "123-1234567-1234567",
+            "OrderStatus": "Shipped",
+            "PurchaseDate": "2025-01-30T10:00:00Z",
+            "OrderTotal": {
+              "Amount": "89.99",
+              "CurrencyCode": "GBP"
+            },
+            "NumberOfItemsShipped": 2,
+            "IsPrime": true,
+            "SalesChannel": "Amazon.co.uk"
+          },
+          "expected_result": {
+            "orderId": "123-1234567-1234567",
+            "status": "Shipped",
+            "purchaseDate": "2025-01-30T10:00:00Z",
+            "total": {
+              "Amount": "89.99",
+              "CurrencyCode": "GBP"
+            },
+            "itemCount": 2,
+            "isPrime": true,
+            "salesChannel": "Amazon.co.uk"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order_financial",
+      "name": "Order Financial Data",
+      "description": "Extract only financial information from orders - 75% reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "map({orderId: .AmazonOrderId, orderTotal: .OrderTotal, paymentMethod: .PaymentMethod, items: (.OrderItems // []) | map({sku: .SellerSKU, itemPrice: .ItemPrice, shippingPrice: .ShippingPrice, quantity: .QuantityOrdered})})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 75,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Financial analysis",
+          "description": "Focus on pricing and payment data",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "financial",
+        "pricing",
+        "revenue",
+        "analysis"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "order_items_summary",
+      "name": "Order Items Summary",
+      "description": "Return only SKU, quantity, and price for order items - 80% reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "(.OrderItems // []) | map({sku: .SellerSKU, quantity: .QuantityOrdered, price: .ItemPrice.Amount, title: .Title})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 80,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Items overview",
+          "description": "Get just the essential item information",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "items",
+        "inventory",
+        "sku",
+        "summary"
+      ],
+      "test_cases": [
+        {
+          "name": "order_items_test",
+          "test_data": {
+            "OrderItems": [
+              {
+                "SellerSKU": "SKU-001",
+                "QuantityOrdered": 2,
+                "ItemPrice": {
+                  "Amount": "39.99",
+                  "CurrencyCode": "GBP"
+                },
+                "Title": "Example Product"
+              }
+            ]
+          },
+          "expected_result": [
+            {
+              "sku": "SKU-001",
+              "quantity": 2,
+              "price": "39.99",
+              "title": "Example Product"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "order_shipping_info",
+      "name": "Order Shipping Information",
+      "description": "Extract shipping-related data only - 70% reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "map({orderId: .AmazonOrderId, status: .OrderStatus, shipServiceLevel: .ShipServiceLevel, earliestShipDate: .EarliestShipDate, latestShipDate: .LatestShipDate, earliestDeliveryDate: .EarliestDeliveryDate, latestDeliveryDate: .LatestDeliveryDate, fulfillmentChannel: .FulfillmentChannel})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 70,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Shipping tracking",
+          "description": "Focus on fulfillment and delivery information",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "shipping",
+        "fulfillment",
+        "delivery",
+        "logistics"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "order_status_tracking",
+      "name": "Order Status Tracking",
+      "description": "Minimal tracking information - 92% reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "map({orderId: .AmazonOrderId, status: .OrderStatus, lastUpdate: .LastUpdateDate})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 92,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Quick status check",
+          "description": "Just order ID and current status",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "status",
+        "tracking",
+        "minimal",
+        "monitoring"
+      ],
+      "test_cases": [
+        {
+          "name": "status_tracking_test",
+          "test_data": {
+            "AmazonOrderId": "123-1234567-1234567",
+            "OrderStatus": "Shipped",
+            "LastUpdateDate": "2025-01-30T11:00:00Z"
+          },
+          "expected_result": {
+            "orderId": "123-1234567-1234567",
+            "status": "Shipped",
+            "lastUpdate": "2025-01-30T11:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "order_customer_info",
+      "name": "Order Customer Information",
+      "description": "Customer-related data for CRM purposes - 60% reduction",
+      "category": "orders",
+      "filter_type": "field",
+      "query": "map({orderId: .AmazonOrderId, buyerInfo: .BuyerInfo, isBusinessOrder: .IsBusinessOrder, isPrime: .IsPrime, salesChannel: .SalesChannel, marketplaceId: .MarketplaceId})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 60,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_order"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Customer analysis",
+          "description": "Focus on customer segmentation data",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "customer",
+        "crm",
+        "prime",
+        "business"
+      ],
+      "test_cases": []
+    }
+  ]
+}

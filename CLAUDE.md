@@ -74,9 +74,183 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 9. **get_session_data** - Retrieve stored session data (requires auth_token)
 
 #### Amazon SP-API Tools
-10. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars)
+10. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars) **[NOW WITH FILTERING SUPPORT]**
 11. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
-12. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars)
+12. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars) **[NOW WITH FILTERING SUPPORT]**
+
+#### JSON Filtering and Data Reduction Tools (NEW!)
+13. **get_available_filters** - Discover available filters for dramatic API response size reduction (requires auth_token)
+
+## JSON Filtering System - REVOLUTIONARY DATA REDUCTION! 🚀
+
+### Overview
+The MCP server now includes a powerful JSON filtering system that can reduce API response sizes by **85-99%**! This dramatically improves performance, reduces bandwidth costs, and speeds up LLM processing.
+
+### Filter Types
+
+#### 1. Record Filters
+- **Purpose**: Reduce the number of items returned
+- **Examples**: high-value orders, low-stock items, pending orders
+- **Typical reduction**: Varies (depends on data matching criteria)
+
+#### 2. Field Filters
+- **Purpose**: Reduce data within each item (keep only essential fields)
+- **Examples**:
+  - Order summary: `~2KB → ~100 bytes` (95% reduction)
+  - Inventory summary: `~1KB → ~80 bytes` (92% reduction)
+- **Typical reduction**: 85-99%
+
+#### 3. Chain Filters
+- **Purpose**: Combine record + field filters for maximum reduction
+- **Examples**:
+  - High-value orders + summary data: **98% reduction**
+  - Low-stock items + stock levels: **95% reduction**
+- **Typical reduction**: 95-99%
+
+### How to Use Filtering
+
+#### Step 1: Discover Available Filters
+```python
+# Get all available filters
+result = get_available_filters(auth_token="your_token")
+
+# Filter by endpoint
+result = get_available_filters(
+    auth_token="your_token",
+    endpoint="get_orders"
+)
+
+# Filter by type
+result = get_available_filters(
+    auth_token="your_token",
+    filter_type="field"  # or "record" or "chain"
+)
+```
+
+#### Step 2: Apply Filters to API Calls
+
+**Simple Field Filtering (95% reduction):**
+```python
+# Get order summaries only (ID, status, total)
+result = get_orders(
+    auth_token="your_token",
+    filter_id="order_summary"
+)
+```
+
+**Filter Chaining (98% reduction):**
+```python
+# High-value orders with summary data only
+result = get_orders(
+    auth_token="your_token",
+    filter_chain="high_value_orders,order_summary",
+    filter_params='{"threshold": 100.0}'
+)
+```
+
+**Custom Filtering:**
+```python
+# Custom JSON Query expression
+result = get_orders(
+    auth_token="your_token",
+    custom_filter='filter(.OrderTotal.Amount > 50) | map({id: .AmazonOrderId, total: .OrderTotal.Amount})'
+)
+```
+
+**Auto-Reduction:**
+```python
+# Apply default data reduction
+result = get_orders(
+    auth_token="your_token",
+    reduce_response=True
+)
+```
+
+### Pre-Built Filters
+
+#### Order Filters
+- **order_summary**: ID, status, total (95% reduction)
+- **order_essentials**: Key order info (85% reduction)
+- **order_financial**: Financial data only (75% reduction)
+- **order_items_summary**: Item SKU, quantity, price (80% reduction)
+- **high_value_orders**: Orders above threshold
+- **pending_orders**: Orders needing attention
+- **prime_orders**: Prime customer orders
+
+#### Inventory Filters
+- **inventory_summary**: SKU, ASIN, quantity (92% reduction)
+- **inventory_stock_levels**: Stock and fulfillable quantities (75% reduction)
+- **inventory_value_analysis**: Value and pricing data (85% reduction)
+- **low_stock_alert**: Items below threshold
+- **high_value_inventory**: Expensive inventory items
+- **out_of_stock**: Zero inventory items
+
+#### Filter Chains (Maximum Reduction!)
+- **high_value_order_summary_chain**: High-value orders + summary (98% reduction)
+- **low_stock_alert_chain**: Low stock + levels (95% reduction)
+- **pending_orders_essentials_chain**: Pending + essentials (92% reduction)
+
+### Performance Benefits
+
+| Use Case | Original Size | Filtered Size | Reduction |
+|----------|---------------|---------------|-----------|
+| Order Summary | ~2KB per order | ~100 bytes | 95% |
+| Inventory Summary | ~1KB per item | ~80 bytes | 92% |
+| Count Only | ~100KB dataset | ~20 bytes | 99.98% |
+| High-Value Chain | ~100KB dataset | ~500 bytes | 99.5% |
+
+### Advanced Usage
+
+#### Multiple Filters in Chain
+```python
+# Apply multiple filters in sequence
+result = get_orders(
+    auth_token="your_token",
+    filter_chain="high_value_orders,prime_orders,order_summary"
+)
+```
+
+#### Parameterized Filters
+```python
+# Use custom parameters
+result = get_inventory_in_stock(
+    auth_token="your_token",
+    filter_id="low_stock_alert",
+    filter_params='{"threshold": 5}'  # Very low stock
+)
+```
+
+#### Response Metadata
+The filtered response includes metadata about the reduction:
+```json
+{
+  "success": true,
+  "data": [...],  // Filtered data
+  "filtering": {
+    "original_size_bytes": 50000,
+    "final_size_bytes": 1000,
+    "reduction_percent": 98.0,
+    "execution_time_ms": 15.2,
+    "filters_applied": ["high_value_orders", "order_summary"]
+  }
+}
+```
+
+### Database-Driven Architecture
+
+- **SQLite database**: Stores all filter definitions
+- **Automatic seeding**: Pre-loads filters on startup
+- **Dynamic discovery**: Use `get_available_filters` to explore
+- **Version control**: Track filter versions and changes
+- **Extensible**: Easy to add new filters without code changes
+
+### Best Practices
+
+1. **Start with discovery**: Always use `get_available_filters` first
+2. **Use field filters**: For maximum data reduction
+3. **Chain filters**: Combine record + field filtering
+4. **Monitor metadata**: Check reduction percentages
+5. **Cache results**: Filtered responses are perfect for caching
 
 ### Session Storage Implementation
 

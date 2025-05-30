@@ -1,0 +1,59 @@
+{
+  "success": true,
+  "order": {
+    "BuyerInfo": {
+      "BuyerEmail": "gmltvmnwjswkr85@marketplace.amazon.co.uk"
+    },
+    "AmazonOrderId": "204-7649035-5679539",
+    "EarliestDeliveryDate": "2025-05-23T23:00:00Z",
+    "EarliestShipDate": "2025-05-22T23:00:00Z",
+    "SalesChannel": "Amazon.co.uk",
+    "AutomatedShippingSettings": {
+      "AutomatedCarrier": "DPD UK",
+      "HasAutomatedShippingSettings": true,
+      "AutomatedShipMethod": "ExpressPak Saturday"
+    },
+    "OrderStatus": "Shipped",
+    "NumberOfItemsShipped": 1,
+    "OrderType": "StandardOrder",
+    "IsPremiumOrder": true,
+    "IsPrime": true,
+    "FulfillmentChannel": "MFN",
+    "NumberOfItemsUnshipped": 0,
+    "HasRegulatedItems": false,
+    "IsReplacementOrder": false,
+    "IsSoldByAB": false,
+    "LatestShipDate": "2025-05-23T22:59:59Z",
+    "ShipServiceLevel": "UK Next",
+    "DefaultShipFromLocationAddress": {
+      "StateOrRegion": "Ayrshire",
+      "AddressLine1": "null",
+      "PostalCode": "KA11 4JU",
+      "City": "IRVINE",
+      "CountryCode": "GB",
+      "Name": "null"
+    },
+    "IsISPU": false,
+    "MarketplaceId": "A1F83G8C2ARO7P",
+    "LatestDeliveryDate": "2025-05-24T22:59:59Z",
+    "PurchaseDate": "2025-05-23T07:58:01Z",
+    "ShippingAddress": {
+      "PostalCode": "TW20 0BA",
+      "City": "EGHAM",
+      "CountryCode": "GB"
+    },
+    "IsAccessPointOrder": false,
+    "PaymentMethod": "Other",
+    "IsBusinessOrder": false,
+    "OrderTotal": {
+      "CurrencyCode": "GBP",
+      "Amount": "46.98"
+    },
+    "PaymentMethodDetails": [
+      "Standard"
+    ],
+    "IsGlobalExpressEnabled": false,
+    "LastUpdateDate": "2025-05-24T10:13:32Z",
+    "ShipmentServiceLevelCategory": "NextDay"
+  }
+}

@@ -1,0 +1,323 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Generic field reduction filters that work across multiple endpoints",
+    "category": "field_filters",
+    "created_at": "2025-01-30T00:00:00Z",
+    "estimated_total_reduction": "90-99%"
+  },
+  "filters": [
+    {
+      "id": "count_only",
+      "name": "Count Only",
+      "description": "Return only the count of items - 99% data reduction",
+      "category": "common",
+      "filter_type": "field",
+      "query": "{count: length(.), timestamp: \"2025-01-30T00:00:00Z\"}",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 99,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Simple count",
+          "description": "Just return the number of items",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "count",
+        "analytics",
+        "minimal",
+        "statistics"
+      ],
+      "test_cases": [
+        {
+          "name": "count_test",
+          "test_data": [
+            {
+              "id": "1",
+              "name": "Item 1"
+            },
+            {
+              "id": "2",
+              "name": "Item 2"
+            },
+            {
+              "id": "3",
+              "name": "Item 3"
+            }
+          ],
+          "expected_result": {
+            "count": 3,
+            "timestamp": "2025-01-30T00:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "id": "id_name_only",
+      "name": "ID and Name Only",
+      "description": "Extract only identifier and name fields - 95% reduction",
+      "category": "common",
+      "filter_type": "field",
+      "query": "map({id: (.id // .AmazonOrderId // .sellerSku // .asin), name: (.name // .Title // .productName // .OrderStatus)})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 95,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Basic identification",
+          "description": "Get just ID and name for quick reference",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "id",
+        "name",
+        "minimal",
+        "reference"
+      ],
+      "test_cases": [
+        {
+          "name": "id_name_test",
+          "test_data": [
+            {
+              "AmazonOrderId": "123-456",
+              "Title": "Product A"
+            },
+            {
+              "sellerSku": "SKU-001",
+              "productName": "Product B"
+            }
+          ],
+          "expected_result": [
+            {
+              "id": "123-456",
+              "name": "Product A"
+            },
+            {
+              "id": "SKU-001",
+              "name": "Product B"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "top_n_items",
+      "name": "Top N Items",
+      "description": "Return top N items sorted by specified field",
+      "category": "common",
+      "filter_type": "field",
+      "query": "sort(.{sort_field}, \"desc\") | limit({limit})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "sort_field": {
+          "type": "string",
+          "default": "OrderTotal.Amount",
+          "required": false,
+          "description": "Field to sort by"
+        },
+        "limit": {
+          "type": "number",
+          "default": 10,
+          "required": false,
+          "description": "Maximum number of items to return"
+        }
+      },
+      "examples": [
+        {
+          "name": "Top 10 by value",
+          "description": "Get top 10 highest value items",
+          "parameters": {
+            "sort_field": "OrderTotal.Amount",
+            "limit": 10
+          }
+        },
+        {
+          "name": "Top 5 by quantity",
+          "description": "Get top 5 highest quantity items",
+          "parameters": {
+            "sort_field": "totalQuantity",
+            "limit": 5
+          }
+        }
+      ],
+      "tags": [
+        "top",
+        "limit",
+        "sort",
+        "ranking"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "basic_stats",
+      "name": "Basic Statistics",
+      "description": "Generate basic statistics from numerical data - 98% reduction",
+      "category": "common",
+      "filter_type": "field",
+      "query": "{count: length(.), total_sum: map(.{value_field}) | add, average: (map(.{value_field}) | add) / length(.), max_value: map(.{value_field}) | max, min_value: map(.{value_field}) | min}",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 98,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "value_field": {
+          "type": "string",
+          "default": "OrderTotal.Amount",
+          "required": false,
+          "description": "Numerical field to analyze"
+        }
+      },
+      "examples": [
+        {
+          "name": "Order value statistics",
+          "description": "Statistical analysis of order values",
+          "parameters": {
+            "value_field": "OrderTotal.Amount"
+          }
+        },
+        {
+          "name": "Inventory quantity statistics",
+          "description": "Statistical analysis of inventory quantities",
+          "parameters": {
+            "value_field": "totalQuantity"
+          }
+        }
+      ],
+      "tags": [
+        "statistics",
+        "analytics",
+        "summary",
+        "aggregation"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "grouped_summary",
+      "name": "Grouped Summary",
+      "description": "Group items by a field and provide counts - 90% reduction",
+      "category": "common",
+      "filter_type": "field",
+      "query": "group_by(.{group_field}) | map({category: .[0].{group_field}, count: length(.)})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 90,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "group_field": {
+          "type": "string",
+          "default": "OrderStatus",
+          "required": false,
+          "description": "Field to group by"
+        }
+      },
+      "examples": [
+        {
+          "name": "Orders by status",
+          "description": "Count orders grouped by status",
+          "parameters": {
+            "group_field": "OrderStatus"
+          }
+        },
+        {
+          "name": "Inventory by condition",
+          "description": "Count inventory items by condition",
+          "parameters": {
+            "group_field": "condition"
+          }
+        }
+      ],
+      "tags": [
+        "grouping",
+        "summary",
+        "categorization",
+        "breakdown"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "date_summary",
+      "name": "Date Summary",
+      "description": "Extract and summarize date information - 85% reduction",
+      "category": "common",
+      "filter_type": "field",
+      "query": "map({date: (.PurchaseDate // .lastUpdatedTime // .created_at), day: substring((.PurchaseDate // .lastUpdatedTime // .created_at), 0, 10)})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 85,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Date extraction",
+          "description": "Extract just date information",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "date",
+        "temporal",
+        "time",
+        "chronological"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "existence_check",
+      "name": "Existence Check",
+      "description": "Check which fields exist in the data - 97% reduction",
+      "category": "common",
+      "filter_type": "field",
+      "query": "map(keys) | flatten | unique | map({field: ., exists: true})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 97,
+      "compatible_endpoints": [
+        "get_orders",
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Schema analysis",
+          "description": "Discover what fields are present in the data",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "schema",
+        "fields",
+        "structure",
+        "discovery"
+      ],
+      "test_cases": []
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 """Constants and configuration for Amazon SP-API."""
 
 from datetime import timedelta
-from typing import Dict, Any
 
 # Marketplace configuration
 MARKETPLACES = {
@@ -75,11 +74,11 @@ VALID_MARKETPLACE_IDS = {marketplace["id"] for marketplace in MARKETPLACES.value
 
 # Cache TTLs by data type
 CACHE_TTLS = {
-    "inventory": timedelta(minutes=5),      # Changes frequently
-    "listings": timedelta(minutes=15),      # More stable
-    "pricing": timedelta(minutes=1),        # Very dynamic
-    "catalog": timedelta(hours=1),          # Rarely changes
-    "orders": None,                         # Never cache orders
+    "inventory": timedelta(minutes=5),  # Changes frequently
+    "listings": timedelta(minutes=15),  # More stable
+    "pricing": timedelta(minutes=1),  # Very dynamic
+    "catalog": timedelta(hours=1),  # Rarely changes
+    "orders": None,  # Never cache orders
 }
 
 # SP-API Error Codes

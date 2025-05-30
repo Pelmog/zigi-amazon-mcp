@@ -1,0 +1,477 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Predefined filter chains for complex data reduction scenarios",
+    "category": "chains",
+    "created_at": "2025-01-30T00:00:00Z",
+    "estimated_total_reduction": "95-99%"
+  },
+  "chains": [
+    {
+      "id": "high_value_order_summary_chain",
+      "name": "High-Value Order Summary Chain",
+      "description": "Filter high-value orders and return summary data only - 98% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 98,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "default": 100.0,
+          "required": false,
+          "description": "Minimum order value threshold"
+        }
+      },
+      "examples": [
+        {
+          "name": "High-value orders summary",
+          "description": "Find orders over \u00a3100 and show only key details",
+          "parameters": {
+            "threshold": 100.0
+          }
+        },
+        {
+          "name": "Premium orders summary",
+          "description": "Find orders over \u00a3500 and show only key details",
+          "parameters": {
+            "threshold": 500.0
+          }
+        }
+      ],
+      "tags": [
+        "chain",
+        "high-value",
+        "summary",
+        "orders",
+        "reduction"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "high_value_orders"
+        },
+        {
+          "order": 2,
+          "filter_id": "order_summary"
+        }
+      ]
+    },
+    {
+      "id": "low_stock_alert_chain",
+      "name": "Low Stock Alert Chain",
+      "description": "Find low stock items and return essential stock data - 95% reduction",
+      "category": "inventory",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 95,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "default": 10,
+          "required": false,
+          "description": "Low stock threshold"
+        }
+      },
+      "examples": [
+        {
+          "name": "Critical stock alert",
+          "description": "Find items with 10 or fewer units and show stock levels",
+          "parameters": {
+            "threshold": 10
+          }
+        },
+        {
+          "name": "Emergency stock alert",
+          "description": "Find items with 5 or fewer units",
+          "parameters": {
+            "threshold": 5
+          }
+        }
+      ],
+      "tags": [
+        "chain",
+        "low-stock",
+        "alerts",
+        "inventory",
+        "monitoring"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "low_stock_alert"
+        },
+        {
+          "order": 2,
+          "filter_id": "inventory_stock_levels"
+        }
+      ]
+    },
+    {
+      "id": "pending_orders_essentials_chain",
+      "name": "Pending Orders Essentials Chain",
+      "description": "Filter pending orders and return essential information - 92% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 92,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Pending orders overview",
+          "description": "Show pending orders with essential details only",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "chain",
+        "pending",
+        "essentials",
+        "orders",
+        "fulfillment"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "pending_orders"
+        },
+        {
+          "order": 2,
+          "filter_id": "order_essentials"
+        }
+      ]
+    },
+    {
+      "id": "prime_orders_financial_chain",
+      "name": "Prime Orders Financial Chain",
+      "description": "Filter Prime orders and return financial data only - 90% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 90,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Prime revenue analysis",
+          "description": "Analyze financial data from Prime customer orders",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "chain",
+        "prime",
+        "financial",
+        "revenue",
+        "analysis"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "prime_orders"
+        },
+        {
+          "order": 2,
+          "filter_id": "order_financial"
+        }
+      ]
+    },
+    {
+      "id": "high_value_inventory_summary_chain",
+      "name": "High-Value Inventory Summary Chain",
+      "description": "Filter high-value inventory and return summary data - 96% reduction",
+      "category": "inventory",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 96,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "value_threshold": {
+          "type": "number",
+          "default": 500.0,
+          "required": false,
+          "description": "Minimum inventory value threshold"
+        }
+      },
+      "examples": [
+        {
+          "name": "Premium inventory overview",
+          "description": "Show high-value items with basic info only",
+          "parameters": {
+            "value_threshold": 500.0
+          }
+        }
+      ],
+      "tags": [
+        "chain",
+        "high-value",
+        "inventory",
+        "summary",
+        "premium"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "high_value_inventory"
+        },
+        {
+          "order": 2,
+          "filter_id": "inventory_summary"
+        }
+      ]
+    },
+    {
+      "id": "business_orders_shipping_chain",
+      "name": "Business Orders Shipping Chain",
+      "description": "Filter business orders and return shipping information - 88% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 88,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "B2B shipping overview",
+          "description": "Track shipping for business customers",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "chain",
+        "business",
+        "shipping",
+        "b2b",
+        "logistics"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "business_orders"
+        },
+        {
+          "order": 2,
+          "filter_id": "order_shipping_info"
+        }
+      ]
+    },
+    {
+      "id": "top_orders_summary_chain",
+      "name": "Top Orders Summary Chain",
+      "description": "Get top N orders by value with summary data - 97% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 97,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {
+        "limit": {
+          "type": "number",
+          "default": 10,
+          "required": false,
+          "description": "Number of top orders to return"
+        }
+      },
+      "examples": [
+        {
+          "name": "Top 10 orders",
+          "description": "Show the 10 highest value orders with summary info",
+          "parameters": {
+            "limit": 10
+          }
+        },
+        {
+          "name": "Top 5 orders",
+          "description": "Show the 5 highest value orders",
+          "parameters": {
+            "limit": 5
+          }
+        }
+      ],
+      "tags": [
+        "chain",
+        "top",
+        "ranking",
+        "summary",
+        "analytics"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "top_n_items"
+        },
+        {
+          "order": 2,
+          "filter_id": "order_summary"
+        }
+      ]
+    },
+    {
+      "id": "unfulfillable_inventory_alert_chain",
+      "name": "Unfulfillable Inventory Alert Chain",
+      "description": "Find unfulfillable inventory with product information - 85% reduction",
+      "category": "inventory",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 85,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Problem inventory alert",
+          "description": "Identify and analyze unfulfillable inventory",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "chain",
+        "unfulfillable",
+        "problems",
+        "alerts",
+        "investigation"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "unfulfillable_inventory"
+        },
+        {
+          "order": 2,
+          "filter_id": "inventory_product_info"
+        }
+      ]
+    },
+    {
+      "id": "recent_orders_count_chain",
+      "name": "Recent Orders Count Chain",
+      "description": "Count recent orders only - 99.9% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 99,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {
+        "date_pattern": {
+          "type": "string",
+          "default": "2025-01-[2-3][0-9]",
+          "required": false,
+          "description": "Date pattern for recent orders"
+        }
+      },
+      "examples": [
+        {
+          "name": "Today's order count",
+          "description": "Just count how many orders came in recently",
+          "parameters": {
+            "date_pattern": "2025-01-30"
+          }
+        }
+      ],
+      "tags": [
+        "chain",
+        "recent",
+        "count",
+        "analytics",
+        "minimal"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "recent_orders"
+        },
+        {
+          "order": 2,
+          "filter_id": "count_only"
+        }
+      ]
+    },
+    {
+      "id": "multi_item_orders_items_chain",
+      "name": "Multi-Item Orders Items Chain",
+      "description": "Filter multi-item orders and show item details - 85% reduction",
+      "category": "orders",
+      "filter_type": "chain",
+      "query": "",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": 85,
+      "compatible_endpoints": [
+        "get_orders"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Bulk order analysis",
+          "description": "Analyze what items are in multi-item orders",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "chain",
+        "multi-item",
+        "bulk",
+        "analysis",
+        "items"
+      ],
+      "test_cases": [],
+      "chain_steps": [
+        {
+          "order": 1,
+          "filter_id": "multi_item_orders"
+        },
+        {
+          "order": 2,
+          "filter_id": "order_items_summary"
+        }
+      ]
+    }
+  ]
+}

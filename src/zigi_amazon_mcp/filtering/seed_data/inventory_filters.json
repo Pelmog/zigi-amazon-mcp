@@ -1,0 +1,460 @@
+{
+  "metadata": {
+    "version": "1.0.0",
+    "description": "Record-level filters for Amazon Inventory API - reduce number of inventory items returned",
+    "category": "record_filters",
+    "created_at": "2025-01-30T00:00:00Z"
+  },
+  "filters": [
+    {
+      "id": "low_stock_alert",
+      "name": "Low Stock Alert",
+      "description": "Items below minimum stock threshold",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.totalQuantity <= {threshold}) | sort(.totalQuantity)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "threshold": {
+          "type": "number",
+          "default": 10,
+          "required": false,
+          "description": "Low stock threshold quantity"
+        }
+      },
+      "examples": [
+        {
+          "name": "Critical stock levels",
+          "description": "Items with 10 or fewer units",
+          "parameters": {
+            "threshold": 10
+          }
+        },
+        {
+          "name": "Very low stock",
+          "description": "Items with 5 or fewer units",
+          "parameters": {
+            "threshold": 5
+          }
+        },
+        {
+          "name": "Out of stock soon",
+          "description": "Items with 20 or fewer units",
+          "parameters": {
+            "threshold": 20
+          }
+        }
+      ],
+      "tags": [
+        "low-stock",
+        "alerts",
+        "reorder",
+        "critical",
+        "monitoring"
+      ],
+      "test_cases": [
+        {
+          "name": "low_stock_test",
+          "test_data": [
+            {
+              "totalQuantity": 5
+            },
+            {
+              "totalQuantity": 50
+            },
+            {
+              "totalQuantity": 8
+            },
+            {
+              "totalQuantity": 15
+            }
+          ],
+          "expected_result": [
+            {
+              "totalQuantity": 5
+            },
+            {
+              "totalQuantity": 8
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "out_of_stock",
+      "name": "Out of Stock Items",
+      "description": "Items with zero available quantity",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.inventoryDetails.fulfillableQuantity <= 0)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Zero stock items",
+          "description": "Items that cannot be fulfilled",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "out-of-stock",
+        "zero",
+        "unfulfillable",
+        "urgent"
+      ],
+      "test_cases": [
+        {
+          "name": "out_of_stock_test",
+          "test_data": [
+            {
+              "inventoryDetails": {
+                "fulfillableQuantity": 0
+              }
+            },
+            {
+              "inventoryDetails": {
+                "fulfillableQuantity": 10
+              }
+            },
+            {
+              "inventoryDetails": {
+                "fulfillableQuantity": 0
+              }
+            }
+          ],
+          "expected_result": [
+            {
+              "inventoryDetails": {
+                "fulfillableQuantity": 0
+              }
+            },
+            {
+              "inventoryDetails": {
+                "fulfillableQuantity": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "high_value_inventory",
+      "name": "High Value Inventory",
+      "description": "Inventory items above specified value threshold",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.estimatedValue.value > {value_threshold})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "value_threshold": {
+          "type": "number",
+          "default": 500.0,
+          "required": false,
+          "description": "Minimum inventory value threshold"
+        }
+      },
+      "examples": [
+        {
+          "name": "High value items (\u00a3500+)",
+          "description": "Items worth more than \u00a3500",
+          "parameters": {
+            "value_threshold": 500.0
+          }
+        },
+        {
+          "name": "Premium inventory (\u00a31000+)",
+          "description": "Very high value items",
+          "parameters": {
+            "value_threshold": 1000.0
+          }
+        }
+      ],
+      "tags": [
+        "high-value",
+        "premium",
+        "expensive",
+        "financial"
+      ],
+      "test_cases": [
+        {
+          "name": "high_value_test",
+          "test_data": [
+            {
+              "estimatedValue": {
+                "value": 750.0
+              }
+            },
+            {
+              "estimatedValue": {
+                "value": 250.0
+              }
+            },
+            {
+              "estimatedValue": {
+                "value": 600.0
+              }
+            }
+          ],
+          "expected_result": [
+            {
+              "estimatedValue": {
+                "value": 750.0
+              }
+            },
+            {
+              "estimatedValue": {
+                "value": 600.0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "oversized_inventory",
+      "name": "Oversized Inventory",
+      "description": "Items with high stock levels above threshold",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.totalQuantity > {max_threshold})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "max_threshold": {
+          "type": "number",
+          "default": 1000,
+          "required": false,
+          "description": "Maximum stock threshold for overstock identification"
+        }
+      },
+      "examples": [
+        {
+          "name": "Overstock items (1000+)",
+          "description": "Items with excessive stock levels",
+          "parameters": {
+            "max_threshold": 1000
+          }
+        },
+        {
+          "name": "Very high stock (2000+)",
+          "description": "Items with very high inventory",
+          "parameters": {
+            "max_threshold": 2000
+          }
+        }
+      ],
+      "tags": [
+        "overstock",
+        "excess",
+        "high-quantity",
+        "storage"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "new_condition_only",
+      "name": "New Condition Items",
+      "description": "Filter items in new condition only",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.condition == \"NewItem\")",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "New items only",
+          "description": "Filter inventory to show only new condition items",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "condition",
+        "new",
+        "quality",
+        "pristine"
+      ],
+      "test_cases": [
+        {
+          "name": "new_condition_test",
+          "test_data": [
+            {
+              "condition": "NewItem"
+            },
+            {
+              "condition": "UsedLikeNew"
+            },
+            {
+              "condition": "NewItem"
+            }
+          ],
+          "expected_result": [
+            {
+              "condition": "NewItem"
+            },
+            {
+              "condition": "NewItem"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inbound_inventory",
+      "name": "Inbound Inventory",
+      "description": "Items with inbound shipments in progress",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.inventoryDetails.inboundShippedQuantity > 0)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Incoming stock",
+          "description": "Items with shipments on the way",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "inbound",
+        "shipment",
+        "incoming",
+        "pipeline"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "reserved_inventory",
+      "name": "Reserved Inventory",
+      "description": "Items with significant reserved quantities",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.inventoryDetails.reservedQuantity.totalReservedQuantity > {reserved_threshold})",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "reserved_threshold": {
+          "type": "number",
+          "default": 5,
+          "required": false,
+          "description": "Minimum reserved quantity threshold"
+        }
+      },
+      "examples": [
+        {
+          "name": "High reservation levels",
+          "description": "Items with significant reserved stock",
+          "parameters": {
+            "reserved_threshold": 5
+          }
+        }
+      ],
+      "tags": [
+        "reserved",
+        "allocated",
+        "pending",
+        "orders"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "unfulfillable_inventory",
+      "name": "Unfulfillable Inventory",
+      "description": "Items with unfulfillable quantities requiring attention",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(.inventoryDetails.unfulfillableQuantity > 0)",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {},
+      "examples": [
+        {
+          "name": "Problem inventory",
+          "description": "Items that cannot be sold",
+          "parameters": {}
+        }
+      ],
+      "tags": [
+        "unfulfillable",
+        "problem",
+        "damaged",
+        "stranded"
+      ],
+      "test_cases": []
+    },
+    {
+      "id": "recently_updated_inventory",
+      "name": "Recently Updated Inventory",
+      "description": "Items updated within recent timeframe",
+      "category": "inventory",
+      "filter_type": "record",
+      "query": "(.inventorySummaries // .) | filter(regex(.lastUpdatedTime, \"{date_pattern}\"))",
+      "author": "system",
+      "version": "1.0.0",
+      "estimated_reduction_percent": null,
+      "compatible_endpoints": [
+        "get_inventory_in_stock"
+      ],
+      "parameters": {
+        "date_pattern": {
+          "type": "string",
+          "default": "2025-01-[2-3][0-9]",
+          "required": false,
+          "description": "Regex pattern for recent update date matching"
+        }
+      },
+      "examples": [
+        {
+          "name": "Recently changed inventory",
+          "description": "Items with recent inventory updates",
+          "parameters": {
+            "date_pattern": "2025-01-[2-3][0-9]"
+          }
+        }
+      ],
+      "tags": [
+        "recent",
+        "updated",
+        "changes",
+        "temporal"
+      ],
+      "test_cases": []
+    }
+  ]
+}

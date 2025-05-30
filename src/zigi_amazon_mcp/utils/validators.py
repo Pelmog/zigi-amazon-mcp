@@ -1,9 +1,9 @@
 """Input validation utilities for SP-API parameters."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
-from ..constants import VALID_MARKETPLACE_IDS, FBM_CONFIG
+from ..constants import FBM_CONFIG, VALID_MARKETPLACE_IDS
 
 
 def validate_marketplace_id(marketplace_id: str) -> bool:
@@ -18,7 +18,7 @@ def validate_marketplace_id(marketplace_id: str) -> bool:
     return marketplace_id in VALID_MARKETPLACE_IDS
 
 
-def validate_marketplace_ids(marketplace_ids: str) -> Tuple[bool, List[str]]:
+def validate_marketplace_ids(marketplace_ids: str) -> tuple[bool, list[str]]:
     """Validate comma-separated marketplace IDs.
 
     Args:
@@ -29,10 +29,10 @@ def validate_marketplace_ids(marketplace_ids: str) -> Tuple[bool, List[str]]:
     """
     if not marketplace_ids:
         return False, ["marketplace_ids cannot be empty"]
-    
+
     ids = [mid.strip() for mid in marketplace_ids.split(",")]
     invalid_ids = [mid for mid in ids if not validate_marketplace_id(mid)]
-    
+
     return len(invalid_ids) == 0, invalid_ids
 
 
@@ -47,8 +47,8 @@ def validate_iso8601_date(date_string: str) -> bool:
     """
     try:
         # Handle both with and without 'Z' suffix
-        if date_string.endswith('Z'):
-            datetime.fromisoformat(date_string.replace('Z', '+00:00'))
+        if date_string.endswith("Z"):
+            datetime.fromisoformat(date_string.replace("Z", "+00:00"))
         else:
             datetime.fromisoformat(date_string)
         return True
@@ -79,9 +79,9 @@ def validate_seller_sku(sku: str) -> bool:
     """
     if not sku or len(sku.strip()) == 0:
         return False
-    
+
     # SKUs must not contain certain special characters
-    forbidden_chars = ['<', '>', ':', '"', '|', '?', '*']
+    forbidden_chars = ["<", ">", ":", '"', "|", "?", "*"]
     return not any(char in sku for char in forbidden_chars)
 
 
@@ -98,12 +98,12 @@ def validate_order_status(status: str) -> bool:
         "PendingAvailability",
         "Pending",
         "Unshipped",
-        "PartiallyShipped", 
+        "PartiallyShipped",
         "Shipped",
         "Canceled",
         "Unfulfillable",
         "InvoiceUnconfirmed",
-        "Canceling"
+        "Canceling",
     ]
     return status in valid_statuses
 
@@ -147,17 +147,17 @@ def validate_restock_date(restock_date: str) -> bool:
     """
     if not restock_date:
         return False
-        
+
     if not validate_iso8601_date(restock_date):
         return False
-    
+
     try:
         # Parse the date
-        if restock_date.endswith('Z'):
-            restock_datetime = datetime.fromisoformat(restock_date.replace('Z', '+00:00'))
+        if restock_date.endswith("Z"):
+            restock_datetime = datetime.fromisoformat(restock_date.replace("Z", "+00:00"))
         else:
             restock_datetime = datetime.fromisoformat(restock_date)
-        
+
         # Check if it's in the future
         return restock_datetime > datetime.now(restock_datetime.tzinfo)
     except (ValueError, TypeError):
@@ -176,7 +176,7 @@ def validate_fbm_quantity(quantity: int) -> bool:
     return isinstance(quantity, int) and quantity >= 0
 
 
-def validate_bulk_inventory_updates(updates: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
+def validate_bulk_inventory_updates(updates: list[dict[str, Any]]) -> tuple[bool, list[str]]:
     """Validate bulk inventory update items.
 
     Args:
@@ -186,31 +186,31 @@ def validate_bulk_inventory_updates(updates: List[Dict[str, Any]]) -> Tuple[bool
         Tuple of (is_valid, list_of_errors)
     """
     errors = []
-    
+
     if not updates:
         errors.append("Update list cannot be empty")
         return False, errors
-    
+
     if len(updates) > FBM_CONFIG["MAX_BULK_UPDATE_SIZE"]:
         errors.append(f"Too many updates. Maximum allowed: {FBM_CONFIG['MAX_BULK_UPDATE_SIZE']}")
-    
+
     for idx, update in enumerate(updates):
         # Check required fields
         if "sku" not in update:
             errors.append(f"Item {idx}: Missing required field 'sku'")
         elif not validate_seller_sku(update["sku"]):
             errors.append(f"Item {idx}: Invalid SKU format")
-        
+
         if "quantity" not in update:
             errors.append(f"Item {idx}: Missing required field 'quantity'")
         elif not validate_fbm_quantity(update["quantity"]):
             errors.append(f"Item {idx}: Invalid quantity")
-        
+
         # Check optional fields
         if "handling_time" in update and not validate_handling_time(update["handling_time"]):
             errors.append(f"Item {idx}: Invalid handling time")
-        
+
         if "restock_date" in update and not validate_restock_date(update["restock_date"]):
             errors.append(f"Item {idx}: Invalid restock date")
-    
+
     return len(errors) == 0, errors

@@ -1,10 +1,7 @@
 """Rate limiting implementation for SP-API endpoints."""
 
 import time
-from collections import defaultdict
-from datetime import datetime, timedelta
 from threading import Lock
-from typing import Dict
 
 
 class TokenBucket:
@@ -34,20 +31,17 @@ class TokenBucket:
         """
         with self.lock:
             now = time.time()
-            
+
             # Add tokens based on time elapsed
             time_passed = now - self.last_refill
-            self.tokens = min(
-                self.capacity,
-                self.tokens + time_passed * self.refill_rate
-            )
+            self.tokens = min(self.capacity, self.tokens + time_passed * self.refill_rate)
             self.last_refill = now
-            
+
             # Try to consume tokens
             if self.tokens >= tokens:
                 self.tokens -= tokens
                 return True
-            
+
             return False
 
     def time_until_available(self, tokens: int = 1) -> float:
@@ -62,7 +56,7 @@ class TokenBucket:
         with self.lock:
             if self.tokens >= tokens:
                 return 0.0
-            
+
             tokens_needed = tokens - self.tokens
             return tokens_needed / self.refill_rate
 
@@ -72,17 +66,17 @@ class RateLimiter:
 
     # Rate limits by endpoint type (requests per second, burst capacity)
     RATE_LIMITS = {
-        "/orders/v0/orders": (10, 30),           # Orders API
+        "/orders/v0/orders": (10, 30),  # Orders API
         "/fba/inventory/v1/summaries": (5, 10),  # Inventory API
-        "/feeds/2021-06-30/feeds": (15, 30),     # Feeds API
-        "/reports/2021-06-30/reports": (15, 30), # Reports API
-        "/product-pricing/v0/price": (10, 20),   # Pricing API
-        "/listings/2021-08-01/items": (5, 10),   # Listings API for FBM
+        "/feeds/2021-06-30/feeds": (15, 30),  # Feeds API
+        "/reports/2021-06-30/reports": (15, 30),  # Reports API
+        "/product-pricing/v0/price": (10, 20),  # Pricing API
+        "/listings/2021-08-01/items": (5, 10),  # Listings API for FBM
     }
 
     def __init__(self) -> None:
         """Initialize rate limiter with token buckets for each endpoint."""
-        self.buckets: Dict[str, TokenBucket] = {}
+        self.buckets: dict[str, TokenBucket] = {}
         self.lock = Lock()
 
     def _get_bucket(self, api_path: str) -> TokenBucket:
@@ -98,14 +92,12 @@ class RateLimiter:
             if api_path not in self.buckets:
                 # Get rate limits for this endpoint
                 rate_per_second, burst_capacity = self.RATE_LIMITS.get(
-                    api_path, (5, 10)  # Default conservative limits
+                    api_path,
+                    (5, 10),  # Default conservative limits
                 )
-                
-                self.buckets[api_path] = TokenBucket(
-                    capacity=burst_capacity,
-                    refill_rate=rate_per_second
-                )
-            
+
+                self.buckets[api_path] = TokenBucket(capacity=burst_capacity, refill_rate=rate_per_second)
+
             return self.buckets[api_path]
 
     def wait_if_needed(self, api_path: str, tokens: int = 1) -> None:
@@ -116,7 +108,7 @@ class RateLimiter:
             tokens: Number of tokens to consume (default 1)
         """
         bucket = self._get_bucket(api_path)
-        
+
         # If tokens aren't available, wait until they are
         if not bucket.consume(tokens):
             wait_time = bucket.time_until_available(tokens)
