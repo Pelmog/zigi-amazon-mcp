@@ -73,13 +73,31 @@ The server uses FastMCP for MCP protocol implementation. Key details:
 8. **store_session_data** - Store string data by session ID (requires auth_token)
 9. **get_session_data** - Retrieve stored session data (requires auth_token)
 
-#### Amazon SP-API Tools
-10. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars) **[NOW WITH FILTERING SUPPORT]**
-11. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
-12. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars) **[NOW WITH FILTERING SUPPORT]**
+#### JSON Filtering and Data Reduction Tools
+10. **get_available_filters** - Discover available filters for dramatic API response size reduction (requires auth_token)
 
-#### JSON Filtering and Data Reduction Tools (NEW!)
-13. **get_available_filters** - Discover available filters for dramatic API response size reduction (requires auth_token)
+#### Amazon SP-API Tools
+
+##### Order Management
+11. **get_orders** - Retrieve Amazon orders with pagination (requires auth_token + env vars) **[NOW WITH FILTERING SUPPORT]**
+12. **get_order** - Retrieve single Amazon order details (requires auth_token + env vars)
+
+##### Inventory Management
+13. **get_inventory_in_stock** - Get all products currently in stock with inventory details, filterable by FBA/FBM/ALL (requires auth_token + env vars) **[NOW WITH FILTERING SUPPORT]**
+14. **get_fbm_inventory** - Get individual FBM product listings with real-time data (requires auth_token + env vars)
+15. **get_fbm_inventory_report** - Generate bulk FBM inventory reports (requires auth_token + env vars)
+16. **update_fbm_inventory** - Update individual FBM inventory levels (requires auth_token + env vars)
+17. **bulk_update_fbm_inventory** - Bulk update FBM inventory using Feeds API (requires auth_token + env vars)
+
+##### Product Management
+18. **update_product_price** - Update product prices on Amazon (requires auth_token + env vars)
+
+##### Sales Analytics & Reporting
+19. **get_sales_and_traffic_report** - Get comprehensive sales and traffic analytics (requires auth_token + env vars)
+20. **create_report** - Create various types of reports (requires auth_token + env vars)
+21. **get_report_status** - Check report processing status (requires auth_token + env vars)
+22. **get_report_document** - Download completed report data (requires auth_token + env vars)
+23. **get_inventory_analytics_report** - Get inventory performance metrics (requires auth_token + env vars)
 
 ## JSON Filtering System - REVOLUTIONARY DATA REDUCTION! 🚀
 
@@ -95,14 +113,14 @@ The MCP server now includes a powerful JSON filtering system that can reduce API
 
 #### 2. Field Filters
 - **Purpose**: Reduce data within each item (keep only essential fields)
-- **Examples**:
+- **Examples**: 
   - Order summary: `~2KB → ~100 bytes` (95% reduction)
   - Inventory summary: `~1KB → ~80 bytes` (92% reduction)
 - **Typical reduction**: 85-99%
 
 #### 3. Chain Filters
 - **Purpose**: Combine record + field filters for maximum reduction
-- **Examples**:
+- **Examples**: 
   - High-value orders + summary data: **98% reduction**
   - Low-stock items + stock levels: **95% reduction**
 - **Typical reduction**: 95-99%
@@ -122,7 +140,7 @@ result = get_available_filters(
 
 # Filter by type
 result = get_available_filters(
-    auth_token="your_token",
+    auth_token="your_token", 
     filter_type="field"  # or "record" or "chain"
 )
 ```
@@ -715,258 +733,3 @@ When implementing new endpoints, follow this priority:
 5. **Catalog** (Phase 5)
    - Product Search
    - Catalog Details
-
-### Code Generation Best Practices
-
-When implementing new SP-API functionality:
-
-1. **File Creation Guidelines**:
-   - Create new module files in `api/` directory for each SP-API domain
-   - Create utility files in `utils/` only for reusable components
-   - Never duplicate functionality - extract common patterns to base classes
-
-2. **Import Organization**:
-   ```python
-   # Standard library imports
-   import json
-   from datetime import datetime, timedelta
-   from typing import Dict, Any, Optional
-
-   # Third-party imports
-   import requests
-   from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
-
-   # Local imports
-   from .base import BaseAPIClient
-   from ..utils.rate_limiter import RateLimiter
-   from ..utils.validators import validate_marketplace_id
-   ```
-
-3. **Type Annotations**:
-   - Use `Annotated[type, "description"]` for all MCP tool parameters
-   - Use proper return type hints for all functions
-   - Add `# type: ignore[import-untyped]` for libraries without stubs
-
-4. **Error Handling Pattern**:
-   ```python
-   try:
-       # API call logic
-       response = self._make_request(...)
-       return {"success": True, "data": response}
-   except RateLimitError as e:
-       return {"success": False, "error": "rate_limit_exceeded", "retry_after": e.retry_after}
-   except requests.HTTPError as e:
-       return {"success": False, "error": "api_error", "details": e.response.json()}
-   except Exception as e:
-       logger.error(f"Unexpected error: {e}")
-       return {"success": False, "error": "unexpected_error", "message": str(e)}
-   ```
-
-5. **Docstring Format**:
-   ```python
-   def function_name(param: str) -> Dict[str, Any]:
-       """One-line summary of function purpose.
-
-       Detailed description of what the function does, when to use it,
-       and any important considerations.
-
-       Args:
-           param: Description of the parameter
-
-       Returns:
-           Description of return value structure
-
-       Raises:
-           RateLimitError: When rate limit is exceeded
-           ValidationError: When input validation fails
-
-       Example:
-           >>> result = function_name("value")
-           >>> print(result["success"])
-           True
-       """
-   ```
-
-6. **Constant Definitions**:
-   - Define API paths in class constants
-   - Define rate limits in module constants
-   - Use enums for fixed value sets
-
-7. **Testing Patterns**:
-   ```python
-   @pytest.fixture
-   def mock_api_client():
-       """Create mock API client with test credentials."""
-       return APIClient("test_token", {"AccessKeyId": "test"})
-
-   @patch('requests.request')
-   def test_api_call(mock_request, mock_api_client):
-       """Test pattern for API calls."""
-       # Setup mock response
-       mock_response = Mock()
-       mock_response.status_code = 200
-       mock_response.json.return_value = {"test": "data"}
-       mock_request.return_value = mock_response
-
-       # Make call
-       result = mock_api_client.method()
-
-       # Assertions
-       assert result["success"] is True
-       mock_request.assert_called_once()
-   ```
-
-### Implementation Checklist
-
-For each new SP-API endpoint, ensure:
-
-- [ ] Authentication validation is first check
-- [ ] Rate limiting is applied before API call
-- [ ] Input validation uses validators.py functions
-- [ ] Error handling follows standard pattern
-- [ ] Response format matches success/error structure
-- [ ] Caching is implemented where appropriate
-- [ ] Unit tests cover success and error cases
-- [ ] Documentation includes usage examples
-- [ ] Type hints are complete and accurate
-- [ ] Logging captures key metrics
-
-### Code Review Standards
-
-Before marking any SP-API implementation as complete:
-
-1. **Functionality**:
-   - Endpoint works with real API
-   - Handles all documented parameters
-   - Pagination works correctly
-   - Rate limiting prevents 429 errors
-
-2. **Code Quality**:
-   - Follows module structure
-   - No code duplication
-   - Clear variable names
-   - Appropriate comments
-
-3. **Error Handling**:
-   - All exceptions caught
-   - Meaningful error messages
-   - Consistent error format
-   - Retry logic for transient errors
-
-4. **Security**:
-   - No hardcoded credentials
-   - Input validation prevents injection
-   - Sensitive data not logged
-   - HTTPS enforced
-
-5. **Performance**:
-   - Caching implemented
-   - Batch operations supported
-   - Connection reuse
-   - Reasonable timeouts
-
-6. **Documentation**:
-   - Complete docstrings
-   - Usage examples
-   - Error scenarios documented
-   - Rate limits specified
-
-### SP-API Response Data Handling
-
-When processing SP-API responses:
-
-1. **Extract Nested Data Safely**:
-   ```python
-   # Good: Safe nested access
-   orders = result.get("payload", {}).get("Orders", [])
-
-   # Bad: Can raise KeyError
-   orders = result["payload"]["Orders"]
-   ```
-
-2. **Transform API Data**:
-   ```python
-   # Transform raw API response to consistent format
-   def transform_inventory_item(api_item: Dict) -> Dict:
-       return {
-           "sku": api_item.get("sellerSku"),
-           "asin": api_item.get("asin"),
-           "quantity": {
-               "total": api_item.get("totalQuantity", 0),
-               "available": api_item.get("inventoryDetails", {}).get("fulfillableQuantity", 0),
-               "reserved": api_item.get("inventoryDetails", {}).get("reservedQuantity", {}).get("totalReservedQuantity", 0)
-           },
-           "last_updated": api_item.get("lastUpdatedTime")
-       }
-   ```
-
-3. **Handle Missing Fields**:
-   - Use `.get()` with defaults for optional fields
-   - Document which fields are guaranteed vs optional
-   - Validate required fields before processing
-
-### Async Implementation Guidelines
-
-For bulk operations or multiple API calls:
-
-1. **Use asyncio for Parallel Requests**:
-   ```python
-   import asyncio
-   import aiohttp
-
-   async def fetch_multiple_items(skus: List[str]) -> List[Dict]:
-       async with aiohttp.ClientSession() as session:
-           tasks = [fetch_item(session, sku) for sku in skus]
-           return await asyncio.gather(*tasks)
-   ```
-
-2. **Implement Semaphore for Rate Limiting**:
-   ```python
-   # Limit concurrent requests
-   semaphore = asyncio.Semaphore(5)
-
-   async def fetch_with_limit(session, url):
-       async with semaphore:
-           return await fetch(session, url)
-   ```
-
-3. **Batch Processing Pattern**:
-   ```python
-   def process_in_batches(items: List[Any], batch_size: int = 50):
-       for i in range(0, len(items), batch_size):
-           batch = items[i:i + batch_size]
-           yield batch
-   ```
-
-### Debugging and Troubleshooting
-
-1. **Enable Debug Logging**:
-   ```python
-   import logging
-   logging.basicConfig(level=logging.DEBUG)
-
-   # Log API requests/responses (sanitize sensitive data)
-   logger.debug(f"API Request: {method} {path}")
-   logger.debug(f"API Response: {response.status_code}")
-   ```
-
-2. **Common Issues**:
-   - **401 Unauthorized**: Check LWA token refresh
-   - **403 Forbidden**: Verify IAM role permissions
-   - **429 Too Many Requests**: Implement backoff
-   - **500 Server Error**: Retry with exponential backoff
-
-3. **Request ID Tracking**:
-   ```python
-   import uuid
-
-   request_id = str(uuid.uuid4())
-   logger.info(f"Request {request_id}: Starting API call")
-   # Include request_id in all related log messages
-   ```
-
-# important-instruction-reminders
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

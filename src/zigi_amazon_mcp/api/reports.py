@@ -16,6 +16,11 @@ from .base import BaseAPIClient
 
 logger = logging.getLogger(__name__)
 
+# Report type constants for exports
+SALES_AND_TRAFFIC_REPORT = "GET_SALES_AND_TRAFFIC_REPORT"
+FBA_INVENTORY_PLANNING = "GET_FBA_INVENTORY_PLANNING_DATA"
+FBA_FULFILLED_SHIPMENTS = "GET_AMAZON_FULFILLED_SHIPMENTS_DATA_GENERAL"
+
 
 class ReportsAPIClient(BaseAPIClient):
     """Client for Amazon SP-API Reports operations (bulk FBM/FBA data)."""
