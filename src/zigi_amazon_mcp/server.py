@@ -23,6 +23,7 @@ from .api.listings import ListingsAPIClient
 from .api.reports import ReportsAPIClient
 from .filtering import FilterManager
 from .utils.decorators import cached_api_call, handle_sp_api_errors
+from .utils.rate_limiter import RateLimiter
 from .utils.validators import (
     validate_bulk_inventory_updates,
     validate_fbm_quantity,
@@ -47,6 +48,9 @@ auth_tokens: set[str] = set()
 
 # Filter manager for JSON filtering and data reduction
 filter_manager = FilterManager()
+
+# Rate limiter for SP-API calls
+rate_limiter = RateLimiter()
 
 
 def initialize_filter_database():
@@ -1610,6 +1614,365 @@ def update_product_price(
         }
 
     # 8. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="reports")
+def get_sales_and_traffic_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    start_date: Annotated[str, "Start date in ISO 8601 format (e.g., '2025-01-01T00:00:00Z')"],
+    end_date: Annotated[str, "End date in ISO 8601 format (e.g., '2025-01-31T23:59:59Z')"],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    report_period: Annotated[str, "Report period: 'DAILY', 'WEEKLY', 'MONTHLY', or 'YEARLY'"] = "MONTHLY",
+    aggregation_level: Annotated[str, "Aggregation level: 'SKU', 'PARENT', or 'CHILD'"] = "SKU",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get sales and traffic analytics report from Amazon Seller Central.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint provides comprehensive sales and traffic analytics data including:
+    - Sales metrics (units ordered, revenue, conversion rates)
+    - Traffic metrics (page views, sessions, click-through rates)
+    - Customer behavior analytics
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Apply rate limiting
+    rate_limiter.wait_if_needed("sales_and_traffic")
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    aws_creds = get_amazon_aws_credentials()
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Create sales and traffic report
+    result = client.create_sales_and_traffic_report(
+        marketplace_ids=marketplace_ids,
+        report_period=report_period,
+        start_date=start_date,
+        end_date=end_date,
+        aggregation_level=aggregation_level,
+    )
+
+    # 6. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="reports")
+def create_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_type: Annotated[
+        str,
+        "Report type (e.g., 'GET_SALES_AND_TRAFFIC_REPORT', 'GET_MERCHANT_LISTINGS_ALL_DATA')",
+    ],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    start_date: Annotated[Optional[str], "Start date in ISO 8601 format (optional)"] = None,
+    end_date: Annotated[Optional[str], "End date in ISO 8601 format (optional)"] = None,
+    report_options: Annotated[str, "JSON string of additional report options"] = "{}",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Create a report request in Amazon Seller Central.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint creates various types of reports including:
+    - Sales reports
+    - Inventory reports  
+    - Order reports
+    - Performance reports
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Apply rate limiting
+    rate_limiter.wait_if_needed("create_report")
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    aws_creds = get_amazon_aws_credentials()
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Parse report options
+    try:
+        options = json.loads(report_options) if report_options else {}
+    except json.JSONDecodeError:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "Invalid JSON format for report_options",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 6. Create report
+    result = client.create_report(
+        report_type=report_type,
+        marketplace_ids=marketplace_ids,
+        start_date=start_date,
+        end_date=end_date,
+        report_options=options,
+    )
+
+    # 7. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="reports")
+def get_report_status(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_id: Annotated[str, "Report ID returned from create_report"],
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get the status of a report request.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint checks the processing status of a previously created report.
+    Report statuses include: 'IN_QUEUE', 'IN_PROGRESS', 'DONE', 'CANCELLED', 'FATAL'
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Apply rate limiting
+    rate_limiter.wait_if_needed("get_report_status")
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    aws_creds = get_amazon_aws_credentials()
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Get report status
+    result = client.get_report(report_id)
+
+    # 6. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="reports")
+def get_report_document(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    report_document_id: Annotated[str, "Report document ID from a completed report"],
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Download and retrieve the content of a completed report.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint downloads the actual report data once the report is in 'DONE' status.
+    The report content is typically in CSV or JSON format.
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Apply rate limiting
+    rate_limiter.wait_if_needed("get_report_document")
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    aws_creds = get_amazon_aws_credentials()
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Get report document
+    result = client.get_report_document(report_document_id)
+
+    # 6. Return formatted JSON
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+@cached_api_call(cache_type="reports")
+def get_inventory_analytics_report(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    start_date: Annotated[str, "Start date in ISO 8601 format (e.g., '2025-01-01T00:00:00Z')"],
+    end_date: Annotated[str, "End date in ISO 8601 format (e.g., '2025-01-31T23:59:59Z')"],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    aggregation_level: Annotated[str, "Aggregation level: 'SKU', 'PARENT', or 'CHILD'"] = "SKU",
+    include_forecasting: Annotated[bool, "Include inventory forecasting data"] = False,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Get inventory analytics and performance metrics.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint provides detailed inventory analytics including:
+    - Inventory turnover rates
+    - Stock-out frequency
+    - Inventory performance metrics
+    - Restock recommendations (if forecasting enabled)
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate auth token
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "auth_failed",
+                "message": "Invalid or missing auth token. Please call get_auth_token() first to obtain a valid token.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Apply rate limiting
+    rate_limiter.wait_if_needed("inventory_analytics")
+
+    # 3. Get credentials
+    access_token = get_amazon_access_token()
+    aws_creds = get_amazon_aws_credentials()
+
+    # 4. Use ReportsAPIClient
+    client = ReportsAPIClient(access_token, aws_creds, region, endpoint)
+
+    # 5. Create inventory analytics report
+    result = client.create_inventory_analytics_report(
+        marketplace_ids=marketplace_ids,
+        start_date=start_date,
+        end_date=end_date,
+        aggregation_level=aggregation_level,
+        include_forecasting=include_forecasting,
+    )
+
+    # 6. Return formatted JSON
     return json.dumps(result, indent=2)
 
 

@@ -27,6 +27,8 @@ class ReportsAPIClient(BaseAPIClient):
         "INACTIVE_LISTINGS": "GET_MERCHANT_LISTINGS_INACTIVE_DATA",
         "FBA_INVENTORY": "GET_AFN_INVENTORY_DATA",
         "MERCHANT_LISTINGS": "GET_MERCHANT_LISTINGS_DATA_BACK_COMPAT",
+        "SALES_AND_TRAFFIC": "GET_SALES_AND_TRAFFIC_REPORT",
+        "INVENTORY_ANALYTICS": "GET_LEDGER_DETAIL_VIEW_DATA",
     }
 
     def get_api_path(self) -> str:
@@ -370,4 +372,71 @@ class ReportsAPIClient(BaseAPIClient):
             error_code,
             message,
             details=error_response.get("errors", []),
+        )
+
+    def create_sales_and_traffic_report(
+        self,
+        marketplace_ids: str,
+        report_period: str,
+        start_date: str,
+        end_date: str,
+        aggregation_level: str = "SKU",
+    ) -> dict[str, Any]:
+        """Create a sales and traffic analytics report.
+
+        Args:
+            marketplace_ids: Comma-separated marketplace IDs
+            report_period: Report period (DAILY, WEEKLY, MONTHLY, YEARLY)
+            start_date: ISO 8601 format start date
+            end_date: ISO 8601 format end date
+            aggregation_level: Aggregation level (SKU, PARENT, CHILD)
+
+        Returns:
+            Dict containing the report creation response
+        """
+        report_options = {
+            "reportPeriod": report_period,
+            "aggregateByTimePeriod": True,
+            "aggregationLevel": aggregation_level,
+        }
+
+        return self.create_report(
+            report_type=self.REPORT_TYPES["SALES_AND_TRAFFIC"],
+            marketplace_ids=marketplace_ids,
+            start_date=start_date,
+            end_date=end_date,
+            report_options=report_options,
+        )
+
+    def create_inventory_analytics_report(
+        self,
+        marketplace_ids: str,
+        start_date: str,
+        end_date: str,
+        aggregation_level: str = "SKU",
+        include_forecasting: bool = False,
+    ) -> dict[str, Any]:
+        """Create an inventory analytics report.
+
+        Args:
+            marketplace_ids: Comma-separated marketplace IDs
+            start_date: ISO 8601 format start date
+            end_date: ISO 8601 format end date
+            aggregation_level: Aggregation level (SKU, PARENT, CHILD)
+            include_forecasting: Include forecasting data
+
+        Returns:
+            Dict containing the report creation response
+        """
+        report_options = {
+            "aggregationLevel": aggregation_level,
+            "includeForecasting": include_forecasting,
+        }
+
+        return self.create_report(
+            report_type=self.REPORT_TYPES["INVENTORY_ANALYTICS"],
+            marketplace_ids=marketplace_ids,
+            start_date=start_date,
+            end_date=end_date,
+            report_options=report_options,
         )

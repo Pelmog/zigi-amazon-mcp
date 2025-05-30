@@ -72,6 +72,12 @@ class RateLimiter:
         "/reports/2021-06-30/reports": (15, 30),  # Reports API
         "/product-pricing/v0/price": (10, 20),  # Pricing API
         "/listings/2021-08-01/items": (5, 10),  # Listings API for FBM
+        # Analytics endpoints
+        "sales_and_traffic": (10, 20),  # Sales and traffic reports
+        "create_report": (15, 30),  # General report creation
+        "get_report_status": (15, 30),  # Report status checks
+        "get_report_document": (10, 20),  # Report document download
+        "inventory_analytics": (10, 20),  # Inventory analytics reports
     }
 
     def __init__(self) -> None:
