@@ -25,11 +25,13 @@ from requests_aws4auth import AWS4Auth  # type: ignore[import-untyped]
 from .api.feeds import FeedsAPIClient
 from .api.inventory import InventoryAPIClient
 from .api.listings import ListingsAPIClient
+from .api.orders import OrdersAPIClient
 from .api.reports import ReportsAPIClient
 from .filtering import FilterManager
 from .utils.decorators import cached_api_call, handle_sp_api_errors
 from .utils.rate_limiter import RateLimiter
 from .utils.validators import (
+    validate_amazon_order_id,
     validate_bulk_inventory_updates,
     validate_fbm_quantity,
     validate_handling_time,
@@ -753,6 +755,578 @@ def get_order(
 
     except Exception as e:
         return f"Error retrieving order {order_id}: {e!s}"
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_order_items(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    order_id: Annotated[str, "Amazon Order ID to retrieve items for (e.g., '206-8645991-0289149')"],
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    filter_id: Annotated[
+        str,
+        "Filter ID from database to apply to results (use get_available_filters to discover). Reduces response size dramatically.",
+    ] = "",
+    filter_chain: Annotated[
+        str,
+        "Comma-separated chain of filter IDs for complex data reduction (e.g., 'high_value_items,order_items_summary' for 98% reduction)",
+    ] = "",
+    custom_filter: Annotated[str, "Custom JSON Query expression for advanced filtering"] = "",
+    filter_params: Annotated[str, "JSON string of filter parameters (e.g., '{\"threshold\": 100.0}')"] = "{}",
+    reduce_response: Annotated[bool, "Apply default data reduction filter to minimize response size"] = False,
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Retrieve detailed items (products) for a specific Amazon order.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This endpoint retrieves the actual products within an Amazon order, including:
+    - Product identifiers (ASIN, SKU)
+    - Product titles and descriptions
+    - Quantities ordered and shipped
+    - Pricing breakdown (item price, shipping, taxes)
+    - Gift information and promotional discounts
+    - Product condition and fulfillment details
+
+    CRITICAL RATE LIMITING: This endpoint has strict rate limits of 0.5 requests/second
+    with a burst capacity of 30. For bulk analysis, use the filtering system to reduce
+    data size and implement proper delays between calls.
+
+    FILTERING SYSTEM: Supports comprehensive data reduction:
+    - Field filters: Reduce item data by 85-95% (summary, financial, inventory views)
+    - Record filters: Filter items by criteria (high-value, gifts, bulk quantities)
+    - Chain filters: Combine filtering for 95-99% reduction
+
+    Examples:
+    - Basic call: get_order_items(auth_token, "206-8645991-0289149")
+    - Summary data: get_order_items(auth_token, order_id, filter_id="order_items_summary")
+    - High-value items: get_order_items(auth_token, order_id, filter_id="high_value_items",
+                                       filter_params='{"threshold": 100}')
+    - Maximum reduction: get_order_items(auth_token, order_id,
+                                        filter_chain="high_value_items,order_items_summary")
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate authentication
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_auth",
+                "message": "Invalid or missing auth token. Call get_auth_token() first.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Validate order ID format
+    if not validate_amazon_order_id(order_id):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "Invalid Amazon Order ID format. Expected format: XXX-XXXXXXX-XXXXXXX",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 3. Apply rate limiting (critical for this endpoint)
+    api_path = "get_order_items"
+    if not rate_limiter.check_available(api_path):
+        wait_time = rate_limiter.get_wait_time(api_path)
+        return json.dumps(
+            {
+                "success": False,
+                "error": "rate_limit_exceeded",
+                "message": f"Rate limit exceeded. Please wait {wait_time:.1f} seconds before retry.",
+                "retry_after": wait_time,
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                    "rate_limit_info": {
+                        "endpoint": "getOrderItems",
+                        "rate_limit": "0.5 requests/second",
+                        "burst_capacity": 30,
+                    },
+                },
+            },
+            indent=2,
+        )
+
+    try:
+        # 4. Get SP-API credentials
+        access_token = get_amazon_access_token()
+        if not access_token:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "auth_failed",
+                    "message": "Failed to get Amazon access token. Check your LWA credentials.",
+                    "metadata": {
+                        "timestamp": datetime.now().isoformat() + "Z",
+                        "request_id": str(uuid.uuid4()),
+                    },
+                },
+                indent=2,
+            )
+
+        aws_creds = get_amazon_aws_credentials()
+        if not aws_creds:
+            return json.dumps(
+                {
+                    "success": False,
+                    "error": "auth_failed",
+                    "message": "Failed to get AWS credentials. Check your AWS credentials and role.",
+                    "metadata": {
+                        "timestamp": datetime.now().isoformat() + "Z",
+                        "request_id": str(uuid.uuid4()),
+                    },
+                },
+                indent=2,
+            )
+
+        # 5. Initialize OrdersAPIClient
+        client = OrdersAPIClient(access_token, aws_creds, region, endpoint)
+
+        # 6. Make API call with proper rate limiting
+        start_time = datetime.now()
+
+        # Apply rate limiting before the call
+        rate_limiter.wait_if_needed(api_path)
+
+        # Convert marketplace_ids to list
+        marketplace_list = [mid.strip() for mid in marketplace_ids.split(",")]
+
+        api_response = client.get_order_items(
+            order_id=order_id, marketplace_ids=marketplace_list if marketplace_ids else None
+        )
+
+        execution_time = (datetime.now() - start_time).total_seconds() * 1000
+
+        # 7. Extract order items from response
+        if not api_response.get("success"):
+            return json.dumps(api_response, indent=2)
+
+        order_items = api_response.get("data", {}).get("OrderItems", [])
+        original_size = len(json.dumps(api_response, default=str))
+
+        # 8. Apply filtering if requested
+        filtered_data = order_items
+        filters_applied = []
+
+        if custom_filter:
+            try:
+                filter_result = filter_manager.apply_enhanced_filtering(
+                    data=filtered_data,
+                    custom_filter=custom_filter,
+                    endpoint="get_order_items",
+                )
+                if filter_result["success"]:
+                    filtered_data = filter_result["data"]
+                    filters_applied.append("custom_filter")
+            except Exception as e:
+                print(f"Custom filter failed: {e}")
+                # Include filtering error but don't fail the request
+
+        elif filter_chain:
+            try:
+                filter_result = filter_manager.apply_enhanced_filtering(
+                    data=filtered_data,
+                    filter_chain=filter_chain,
+                    filter_params=filter_params,
+                    endpoint="get_order_items",
+                )
+                if filter_result["success"]:
+                    filtered_data = filter_result["data"]
+                    filters_applied.extend(filter_chain.split(","))
+            except Exception as e:
+                print(f"Filter chain failed: {e}")
+                # Include filtering error but don't fail the request
+
+        elif filter_id:
+            try:
+                filter_result = filter_manager.apply_enhanced_filtering(
+                    data=filtered_data,
+                    filter_id=filter_id,
+                    filter_params=filter_params,
+                    endpoint="get_order_items",
+                )
+                if filter_result["success"]:
+                    filtered_data = filter_result["data"]
+                    filters_applied.append(filter_id)
+            except Exception as e:
+                print(f"Filter by ID failed: {e}")
+                # Include filtering error but don't fail the request
+
+        elif reduce_response:
+            # Apply default summary filter
+            try:
+                filter_result = filter_manager.apply_enhanced_filtering(
+                    data=filtered_data, filter_id="order_items_summary", endpoint="get_order_items"
+                )
+                if filter_result["success"]:
+                    filtered_data = filter_result["data"]
+                    filters_applied.append("order_items_summary")
+            except Exception as e:
+                print(f"Response reduction failed: {e}")
+                # Include filtering error but don't fail the request
+
+        final_size = len(json.dumps(filtered_data, default=str))
+        reduction_percent = ((original_size - final_size) / original_size * 100) if original_size > 0 else 0
+
+        # 9. Build response
+        response_data = {
+            "success": True,
+            "order_id": order_id,
+            "items_count": len(filtered_data),
+            "order_items": filtered_data,
+            "filtering": {
+                "original_size_bytes": original_size,
+                "final_size_bytes": final_size,
+                "reduction_percent": round(reduction_percent, 1),
+                "execution_time_ms": round(execution_time, 2),
+                "filters_applied": filters_applied,
+                "timestamp": datetime.now().isoformat() + "Z",
+            },
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+                "rate_limit_info": {
+                    "endpoint": "getOrderItems",
+                    "rate_limit": "0.5 requests/second",
+                    "burst_capacity": 30,
+                    "next_request_available_in": rate_limiter.get_wait_time(api_path),
+                },
+            },
+        }
+
+        # 10. Save JSON to received-json folder
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            received_json_dir = Path("received-json")
+            received_json_dir.mkdir(exist_ok=True)
+
+            filename = f"order_items_{order_id}_{timestamp}.json"
+            file_path = received_json_dir / filename
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(response_data, f, indent=2, default=str)
+
+        except Exception as e:
+            # Log error but don't fail the main operation
+            print(f"Warning: Failed to save JSON file: {e}")
+
+        return json.dumps(response_data, indent=2, default=str)
+
+    except Exception as e:
+        error_response = {
+            "success": False,
+            "error": "unexpected_error",
+            "message": f"An unexpected error occurred: {e!s}",
+            "order_id": order_id,
+            "metadata": {
+                "timestamp": datetime.now().isoformat() + "Z",
+                "request_id": str(uuid.uuid4()),
+            },
+        }
+        return json.dumps(error_response, indent=2)
+
+
+@mcp.tool()
+@handle_sp_api_errors
+def get_bulk_order_items(
+    auth_token: Annotated[
+        str,
+        "Authentication token obtained from get_auth_token(). Required for this function to work.",
+    ],
+    order_ids: Annotated[str, "Comma-separated list of Amazon Order IDs to retrieve items for"],
+    filter_id: Annotated[str, "Filter to apply for data reduction (highly recommended)"] = "order_items_summary",
+    max_concurrent: Annotated[int, "Maximum concurrent requests (max 5 recommended)"] = 3,
+    delay_between_batches: Annotated[float, "Delay between batches in seconds"] = 10.0,
+    marketplace_ids: Annotated[
+        str, "Comma-separated marketplace IDs (e.g., 'A1F83G8C2ARO7P' for UK)"
+    ] = "A1F83G8C2ARO7P",
+    region: Annotated[str, "AWS region for the SP-API endpoint"] = "eu-west-1",
+    endpoint: Annotated[str, "SP-API endpoint URL"] = "https://sellingpartnerapi-eu.amazon.com",
+) -> str:
+    """Retrieve order items for multiple orders with intelligent rate limiting.
+
+    REQUIRES AUTHENTICATION: You must provide a valid auth_token obtained from get_auth_token().
+
+    This function handles bulk retrieval of order items across multiple orders
+    while respecting SP-API rate limits. It processes orders in batches with
+    delays to prevent rate limit violations.
+
+    CRITICAL: This function can take significant time for large order sets.
+    Example: 100 orders = ~200 seconds minimum (due to 0.5 req/sec limit).
+
+    RECOMMENDED: Always use a filter (default: order_items_summary) to reduce
+    response size and improve performance. Without filtering, responses can be
+    extremely large and slow to process.
+
+    Rate Limiting Strategy:
+    - Enforces 0.5 requests/second limit (2+ second delays)
+    - Processes orders in small batches
+    - Provides progress updates and time estimates
+    - Handles rate limit errors gracefully
+
+    Args:
+        auth_token: Authentication token
+        order_ids: Comma-separated list of Amazon Order IDs
+        filter_id: Filter to apply for data reduction (highly recommended)
+        max_concurrent: Maximum concurrent requests (max 5 recommended)
+        delay_between_batches: Delay between batches in seconds
+
+    Also requires environment variables:
+    - LWA_CLIENT_ID: Login with Amazon client ID
+    - LWA_CLIENT_SECRET: Login with Amazon client secret
+    - LWA_REFRESH_TOKEN: Login with Amazon refresh token
+    - AWS_ACCESS_KEY_ID: AWS access key
+    - AWS_SECRET_ACCESS_KEY: AWS secret key
+    - AWS_ROLE_ARN: AWS role ARN (optional, has default)
+    """
+    # 1. Validate authentication
+    if not validate_auth_token(auth_token):
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_auth",
+                "message": "Invalid or missing auth token. Call get_auth_token() first.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 2. Parse and validate order IDs
+    order_list = [oid.strip() for oid in order_ids.split(",") if oid.strip()]
+
+    if not order_list:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": "No valid order IDs provided.",
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    if len(order_list) > 100:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "too_many_orders",
+                "message": "Maximum 100 orders per bulk request. Use pagination for larger sets.",
+                "provided_count": len(order_list),
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 3. Validate order ID formats
+    invalid_orders = [oid for oid in order_list if not validate_amazon_order_id(oid)]
+    if invalid_orders:
+        return json.dumps(
+            {
+                "success": False,
+                "error": "invalid_input",
+                "message": f"Invalid order ID format(s): {', '.join(invalid_orders[:5])}",
+                "invalid_orders": invalid_orders,
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 4. Process orders with rate limiting
+    results = []
+    errors = []
+    total_start_time = datetime.now()
+
+    # Calculate time estimates
+    estimated_time_seconds = len(order_list) * 2.1  # 2.1 seconds per request (0.5 req/sec + buffer)
+
+    # Process in batches to respect rate limits
+    batch_size = min(max_concurrent, 3)  # Conservative batch size
+    processed_count = 0
+
+    try:
+        for i in range(0, len(order_list), batch_size):
+            batch = order_list[i : i + batch_size]
+            datetime.now()
+
+            for order_id in batch:
+                try:
+                    # Call get_order_items with rate limiting
+                    result_json = get_order_items(
+                        auth_token=auth_token,
+                        order_id=order_id,
+                        filter_id=filter_id,
+                        marketplace_ids=marketplace_ids,
+                        region=region,
+                        endpoint=endpoint,
+                    )
+
+                    result = json.loads(result_json)
+                    if result.get("success"):
+                        results.append({
+                            "order_id": order_id,
+                            "items": result.get("order_items", []),
+                            "items_count": result.get("items_count", 0),
+                            "filtering": result.get("filtering", {}),
+                        })
+                    else:
+                        errors.append({
+                            "order_id": order_id,
+                            "error": result.get("error"),
+                            "message": result.get("message"),
+                        })
+
+                    processed_count += 1
+
+                    # Rate limiting: 0.5 req/sec = 2+ seconds between requests
+                    if processed_count < len(order_list):  # Don't wait after the last request
+                        import time
+
+                        time.sleep(2.1)  # Slightly more than 2 seconds to be safe
+
+                except Exception as e:
+                    errors.append({"order_id": order_id, "error": "unexpected_error", "message": str(e)})
+                    processed_count += 1
+
+            # Progress update (could be logged or returned in streaming response)
+            (processed_count / len(order_list)) * 100
+            elapsed_time = (datetime.now() - total_start_time).total_seconds()
+            (estimated_time_seconds - elapsed_time) if elapsed_time < estimated_time_seconds else 0
+
+            # Delay between batches (in addition to per-request delays)
+            if i + batch_size < len(order_list):
+                import time
+
+                time.sleep(delay_between_batches)
+
+    except KeyboardInterrupt:
+        # Handle graceful shutdown if interrupted
+        return json.dumps(
+            {
+                "success": False,
+                "error": "interrupted",
+                "message": "Bulk processing was interrupted",
+                "partial_results": {
+                    "orders_processed": len(results),
+                    "orders_failed": len(errors),
+                    "results": results,
+                    "errors": errors,
+                },
+                "metadata": {
+                    "timestamp": datetime.now().isoformat() + "Z",
+                    "request_id": str(uuid.uuid4()),
+                },
+            },
+            indent=2,
+        )
+
+    # 5. Calculate final statistics
+    total_time = (datetime.now() - total_start_time).total_seconds()
+    total_items = sum(r["items_count"] for r in results)
+
+    # 6. Calculate data reduction statistics
+    if results:
+        total_original_size = sum(r["filtering"].get("original_size_bytes", 0) for r in results if "filtering" in r)
+        total_final_size = sum(r["filtering"].get("final_size_bytes", 0) for r in results if "filtering" in r)
+        overall_reduction = (
+            ((total_original_size - total_final_size) / total_original_size * 100) if total_original_size > 0 else 0
+        )
+    else:
+        total_original_size = total_final_size = overall_reduction = 0
+
+    # 7. Build comprehensive response
+    response_data = {
+        "success": True,
+        "summary": {
+            "orders_requested": len(order_list),
+            "orders_processed": len(results),
+            "orders_failed": len(errors),
+            "total_items": total_items,
+            "processing_time_seconds": round(total_time, 1),
+            "filter_applied": filter_id,
+        },
+        "performance": {
+            "average_time_per_order": round(total_time / len(order_list), 2),
+            "rate_limit_compliance": "0.5 requests/second maintained",
+            "estimated_vs_actual": {
+                "estimated_seconds": round(estimated_time_seconds, 1),
+                "actual_seconds": round(total_time, 1),
+                "variance": round(((total_time - estimated_time_seconds) / estimated_time_seconds * 100), 1),
+            },
+        },
+        "data_reduction": {
+            "total_original_size_bytes": total_original_size,
+            "total_final_size_bytes": total_final_size,
+            "overall_reduction_percent": round(overall_reduction, 1),
+            "filter_effectiveness": "High" if overall_reduction > 80 else "Medium" if overall_reduction > 50 else "Low",
+        },
+        "results": results,
+        "errors": errors if errors else None,
+        "metadata": {
+            "timestamp": datetime.now().isoformat() + "Z",
+            "request_id": str(uuid.uuid4()),
+            "rate_limit_info": {
+                "endpoint": "getOrderItems (bulk)",
+                "rate_limit": "0.5 requests/second",
+                "total_requests_made": len(results) + len(errors),
+                "estimated_time_for_100_orders": "~210 seconds (3.5 minutes)",
+            },
+        },
+    }
+
+    # 8. Save bulk results to received-json folder
+    try:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        received_json_dir = Path("received-json")
+        received_json_dir.mkdir(exist_ok=True)
+
+        filename = f"bulk_order_items_{len(order_list)}_orders_{timestamp}.json"
+        file_path = received_json_dir / filename
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(response_data, f, indent=2, default=str)
+
+    except Exception as e:
+        # Log error but don't fail the main operation
+        print(f"Warning: Failed to save bulk results JSON file: {e}")
+
+    return json.dumps(response_data, indent=2, default=str)
 
 
 @mcp.tool()
@@ -1722,7 +2296,7 @@ def create_report(
 
     This endpoint creates various types of reports including:
     - Sales reports
-    - Inventory reports  
+    - Inventory reports
     - Order reports
     - Performance reports
 

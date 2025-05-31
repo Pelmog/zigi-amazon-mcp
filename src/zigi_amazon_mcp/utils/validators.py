@@ -1,5 +1,6 @@
 """Input validation utilities for SP-API parameters."""
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -51,9 +52,10 @@ def validate_iso8601_date(date_string: str) -> bool:
             datetime.fromisoformat(date_string.replace("Z", "+00:00"))
         else:
             datetime.fromisoformat(date_string)
-        return True
     except (ValueError, TypeError):
         return False
+    else:
+        return True
 
 
 def validate_fulfillment_type(fulfillment_type: str) -> bool:
@@ -83,6 +85,27 @@ def validate_seller_sku(sku: str) -> bool:
     # SKUs must not contain certain special characters
     forbidden_chars = ["<", ">", ":", '"', "|", "?", "*"]
     return not any(char in sku for char in forbidden_chars)
+
+
+def validate_amazon_order_id(order_id: str) -> bool:
+    """Validate Amazon Order ID format.
+
+    Amazon Order IDs follow the format: XXX-XXXXXXX-XXXXXXX
+    Where X is alphanumeric (digits and letters).
+
+    Args:
+        order_id: The Amazon Order ID to validate
+
+    Returns:
+        True if order ID format is valid
+    """
+    if not order_id or not isinstance(order_id, str):
+        return False
+
+    # Amazon Order ID pattern: XXX-XXXXXXX-XXXXXXX
+    # Examples: 206-8645991-0289149, 026-6889566-9346720
+    pattern = r"^\d{3}-\d{7}-\d{7}$"
+    return bool(re.match(pattern, order_id))
 
 
 def validate_order_status(status: str) -> bool:

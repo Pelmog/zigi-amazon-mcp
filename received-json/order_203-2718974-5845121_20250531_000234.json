@@ -1,0 +1,37 @@
+{
+  "success": true,
+  "order": {
+    "BuyerInfo": {},
+    "AmazonOrderId": "203-2718974-5845121",
+    "EarliestShipDate": "2025-02-03T00:00:00Z",
+    "SalesChannel": "Amazon.co.uk",
+    "AutomatedShippingSettings": {
+      "AutomatedCarrier": "DPD UK",
+      "HasAutomatedShippingSettings": true,
+      "AutomatedShipMethod": "ExpressPak Next Day"
+    },
+    "OrderStatus": "Canceled",
+    "NumberOfItemsShipped": 0,
+    "OrderType": "StandardOrder",
+    "IsPremiumOrder": true,
+    "IsPrime": true,
+    "FulfillmentChannel": "MFN",
+    "NumberOfItemsUnshipped": 0,
+    "HasRegulatedItems": false,
+    "IsReplacementOrder": false,
+    "IsSoldByAB": false,
+    "LatestShipDate": "2025-02-03T23:59:59Z",
+    "ShipServiceLevel": "UK Next",
+    "IsISPU": false,
+    "MarketplaceId": "A1F83G8C2ARO7P",
+    "PurchaseDate": "2025-02-01T22:39:21Z",
+    "IsAccessPointOrder": false,
+    "IsBusinessOrder": false,
+    "PaymentMethodDetails": [
+      "Standard"
+    ],
+    "IsGlobalExpressEnabled": false,
+    "LastUpdateDate": "2025-02-02T12:59:26Z",
+    "ShipmentServiceLevelCategory": "NextDay"
+  }
+}
