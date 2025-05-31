@@ -101,7 +101,7 @@ class ListingsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.exception(f"Unexpected error in get_listings_item: {e}")
+            logger.exception("Unexpected error in get_listings_item")
             return self._format_error_response(
                 "unexpected_error",
                 f"An unexpected error occurred: {e!s}",
@@ -185,7 +185,7 @@ class ListingsAPIClient(BaseAPIClient):
         except requests.HTTPError as e:
             return self._handle_http_error(e)
         except Exception as e:
-            logger.exception(f"Unexpected error in patch_listings_item: {e}")
+            logger.exception("Unexpected error in patch_listings_item")
             return self._format_error_response(
                 "unexpected_error",
                 f"An unexpected error occurred: {e!s}",
@@ -206,33 +206,33 @@ class ListingsAPIClient(BaseAPIClient):
         attributes = api_response.get("attributes", {})
         offers = api_response.get("offers", [])
         fulfillment_availability = api_response.get("fulfillmentAvailability", [])
-        
+
         # Extract product details from summary
         product_name = summary.get("itemName", "")
         asin = summary.get("asin", "")
         condition = summary.get("conditionType", "Unknown")
-        product_type = summary.get("productType", "")
-        
+        summary.get("productType", "")
+
         # Extract title from attributes if not in summary
         if not product_name and "item_name" in attributes:
             item_name_list = attributes.get("item_name", [])
             if item_name_list and isinstance(item_name_list, list):
                 product_name = item_name_list[0].get("value", "")
-        
+
         # Extract bullet points
         bullet_points = []
         if "bullet_point" in attributes:
             for bullet in attributes.get("bullet_point", []):
                 if isinstance(bullet, dict) and "value" in bullet:
                     bullet_points.append(bullet["value"])
-        
+
         # Extract description
         description = ""
         if "product_description" in attributes:
             desc_list = attributes.get("product_description", [])
             if desc_list and isinstance(desc_list, list):
                 description = desc_list[0].get("value", "")
-        
+
         # Extract search terms/keywords
         search_terms = []
         if "generic_keyword" in attributes:
@@ -241,14 +241,14 @@ class ListingsAPIClient(BaseAPIClient):
                 # Split comma-separated keywords
                 keywords_str = keyword_list[0].get("value", "")
                 search_terms = [term.strip() for term in keywords_str.split(",")]
-        
+
         # Extract brand
         brand = ""
         if "brand" in attributes:
             brand_list = attributes.get("brand", [])
             if brand_list and isinstance(brand_list, list):
                 brand = brand_list[0].get("value", "")
-        
+
         # Extract images
         images = []
         main_image = summary.get("mainImage", {})
@@ -257,9 +257,9 @@ class ListingsAPIClient(BaseAPIClient):
                 "type": "main",
                 "url": main_image["link"],
                 "height": main_image.get("height"),
-                "width": main_image.get("width")
+                "width": main_image.get("width"),
             })
-        
+
         # Add other images from attributes
         for i in range(1, 9):  # Check for up to 8 additional images
             image_attr = f"other_product_image_locator_{i}"
@@ -268,18 +268,15 @@ class ListingsAPIClient(BaseAPIClient):
                 if image_list and isinstance(image_list, list):
                     image_url = image_list[0].get("media_location", "")
                     if image_url:
-                        images.append({
-                            "type": f"additional_{i}",
-                            "url": image_url
-                        })
-        
+                        images.append({"type": f"additional_{i}", "url": image_url})
+
         # Extract FBM fulfillment availability
         fbm_availability = None
         for availability in fulfillment_availability:
             if availability.get("fulfillmentChannelCode") == "DEFAULT":  # FBM indicator
                 fbm_availability = availability
                 break
-        
+
         # Build transformed response with comprehensive data
         transformed = {
             "sku": sku,
@@ -319,7 +316,7 @@ class ListingsAPIClient(BaseAPIClient):
                             "amount": str(schedule[0].get("value_with_tax", "")),
                             "currency": offer.get("currency", "GBP"),
                         }
-        
+
         # Add FBM fulfillment information
         if fbm_availability:
             transformed["fulfillment_availability"] = {
@@ -351,7 +348,7 @@ class ListingsAPIClient(BaseAPIClient):
                     "handling_time": None,
                     "restock_date": None,
                 }
-        
+
         # Add any issues/warnings
         issues = api_response.get("issues", [])
         if issues:

@@ -2,6 +2,7 @@
 
 import time
 from threading import Lock
+from typing import ClassVar
 
 
 class TokenBucket:
@@ -65,8 +66,10 @@ class RateLimiter:
     """Rate limiter for SP-API endpoints using token bucket algorithm."""
 
     # Rate limits by endpoint type (requests per second, burst capacity)
-    RATE_LIMITS = {
-        "/orders/v0/orders": (10, 30),  # Orders API
+    RATE_LIMITS: ClassVar[dict[str, tuple[float, int]]] = {
+        "/orders/v0/orders": (0.0167, 20),  # Orders API - very limited
+        "/orders/v0/orders/{orderId}/orderItems": (0.5, 30),  # Order Items API - CRITICAL: 0.5 req/sec
+        "get_order_items": (0.5, 30),  # Alternative key for order items
         "/fba/inventory/v1/summaries": (5, 10),  # Inventory API
         "/feeds/2021-06-30/feeds": (15, 30),  # Feeds API
         "/reports/2021-06-30/reports": (15, 30),  # Reports API
